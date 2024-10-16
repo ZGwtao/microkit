@@ -18,8 +18,10 @@ use sel4::{
     ObjectType, PageSize, Rights,
 };
 use std::cmp::{max, min};
+use std::collections::hash_map::DefaultHasher;
 use std::collections::{HashMap, HashSet};
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::io::{BufWriter, Write};
 use std::iter::zip;
 use std::mem::size_of;
@@ -2920,6 +2922,10 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
     };
+
+    let mut hasher = DefaultHasher::new();
+    system.hash(&mut hasher);
+    println!("Hash of system description file: {}", hasher.finish());
 
     let monitor_config = MonitorConfig {
         untyped_info_symbol_name: "untyped_info",

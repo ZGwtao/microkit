@@ -7,6 +7,7 @@
 use crate::sel4::{Arch, ArmIrqTrigger, Config, PageSize};
 use crate::util::str_to_bool;
 use crate::MAX_PDS;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 ///
@@ -136,7 +137,7 @@ pub struct SysSetVar {
     pub vaddr: Option<u64>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub struct Channel {
     pub pd_a: usize,
     pub id_a: u64,
@@ -767,6 +768,14 @@ pub struct SystemDescription {
     pub protection_domains: Vec<ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
     pub channels: Vec<Channel>,
+}
+
+impl Hash for SystemDescription {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.protection_domains.hash(state);
+        self.memory_regions.hash(state);
+        self.channels.hash(state);
+    }
 }
 
 fn check_attributes(
