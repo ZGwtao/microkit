@@ -1,6 +1,82 @@
 # Revision History for Microkit
 
-## Release 1.3.0-dev
+## Release 1.4.1-dev
+
+## Release 1.4.1
+
+This release contains various bug fixes. It does not include any new features.
+
+* Fixed two bugs in the tool that lead to initialisation failure on larger Microkit systems.
+* Disabled the `KernelArmVtimerUpdateVOffset` kernel configuration option by default.
+  * This is necessary for Microkit VMs where they rely on knowing the actual surpassed time.
+    More details are in the [pull request](https://github.com/seL4/microkit/pull/202).
+* Enabled FPU for QEMU RISC-V virt and Pine64 Star64.
+  * libmicrokit builds with hardware floating point enabled and, while it does not use the FPU,
+    it means that every object linked with libmicrokit must also build with hardware floating
+    point enabled. Previously using floating point operations would cause a crash in user-space.
+* Fixed the loader link address for the MaaXBoard.
+  * This does mean that if you target the MaaxBoard you will have to loader Microkit images at
+    a different address. See the manual for details.
+* Added error checking for overlapping memory regions.
+* Included every TCB register in the monitor logs when a fault occurs.
+* Made the tool compile from source with a Rust version lower that 1.79.0.
+* Specified a minimum Rust version for the tool (1.73.0).
+* Fixed typo in the `--help` output of the tool.
+* Minor README fixes.
+* Updated PyYAML dependency in requirements.txt to 6.0.2 (from 6.0).
+
+## Release 1.4.0
+
+This release aims to add support for requested features by the community, in order to
+allow more people to use and transition to Microkit. There is of course still more to
+be done over the next couple of releases.
+
+This release has no breaking changes.
+
+### Features added
+
+* Added support for RISC-V 64-bit based platforms.
+* Added a new 'benchmark' configuration to allow access to the in-kernel
+  performance tracking.
+* Add the ability to configure the stack size of a PD.
+* Export ARM architectural timer to user-space for the QEMU virt AArch64 platform.
+  * This platform does not have any other timer so this is allows having a timer
+    driver when simulating/developing Microkit systems with QEMU.
+* Add new APIs for 'deferred' versions of `microkit_notify` and `microkit_irq_ack`.
+  See the manual for details on when and how to use these.
+
+### Other changes
+
+* Made a number of internal changes to the tool to improve performance and peak memory
+  usage.
+    * The tool's performance was not noticeable until building larger systems with Microkit.
+      Now invoking the Microkit tool with a large system should not take more than 500ms-1s to
+      complete. There are more opportunities for optimisation if we do run into the tool slowing
+      down however.
+
+### Bug fixes
+
+* Fixed the loader to not print unless in debug mode (matching the behaviour of
+  the kernel and monitor).
+* Add error checking for duplicate symbols between `setvar_vaddr` attributes and
+  `setvar` elements.
+* Fixed an internal issue that prevented the Monitor from printing out correct fault
+  information in debug mode.
+* Fixed the parsing of parent protection domains, previously non-trivial cases were
+  leading to errors.
+* Fixed the tool to explicitly skip ELF segments that are not declared as loadable,
+  previously the tool assumed all segments would be loaded at runtime.
+* Fix permissions applied to the distributed/packaged SDK. Previously this would cause
+  `sudo` access to move/remove the SDK.
+* Fixed an internal issue that prevented a memory region from being allocated at a fixed
+  physical address that is not part of device memory (e.g within RAM).
+
+### Board support
+
+This release adds support for the following platforms:
+
+* QEMU virt (RISC-V 64-bit)
+* Pine64 Star64
 
 ## Release 1.3.0
 

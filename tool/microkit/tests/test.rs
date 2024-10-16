@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use microkit_tool::{sel4, sysxml};
+use microkit_tool::{sdf, sel4};
 
 const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     arch: sel4::Arch::Aarch64,
@@ -16,18 +16,19 @@ const DEFAULT_KERNEL_CONFIG: sel4::Config = sel4::Config {
     cap_address_bits: 64,
     fan_out_limit: 256,
     hypervisor: true,
-    arm_pa_size_bits: 40,
+    benchmark: false,
+    fpu: true,
+    arm_pa_size_bits: Some(40),
+    arm_smc: None,
+    riscv_pt_levels: None,
 };
-
-const DEFAULT_PLAT_DESC: sysxml::PlatformDescription =
-    sysxml::PlatformDescription::new(&DEFAULT_KERNEL_CONFIG);
 
 fn check_error(test_name: &str, expected_err: &str) {
     let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     path.push("tests/sdf/");
     path.push(test_name);
     let xml = std::fs::read_to_string(path).unwrap();
-    let parse_err = sysxml::parse(test_name, &xml, &DEFAULT_PLAT_DESC).unwrap_err();
+    let parse_err = sdf::parse(test_name, &xml, &DEFAULT_KERNEL_CONFIG).unwrap_err();
 
     if !parse_err.starts_with(expected_err) {
         eprintln!(
@@ -97,6 +98,14 @@ mod memory_region {
             "Error: invalid attribute 'page_count' on element 'memory_region': ",
         )
     }
+
+    #[test]
+    fn test_overlapping_phys_addr() {
+        check_error(
+            "mr_overlapping_phys_addr.xml",
+            "Error: memory region 'mr2' physical address range [0x9001000..0x9002000) overlaps with another memory region 'mr1' [0x9000000..0x9002000) @ ",
+        )
+    }
 }
 
 #[cfg(test)]
@@ -149,6 +158,14 @@ mod protection_domain {
     #[test]
     fn test_missing_region_paddr() {
         check_missing("pd_missing_region_paddr.xml", "region_paddr", "setvar")
+    }
+
+    #[test]
+    fn test_duplicate_setvar() {
+        check_error(
+            "pd_duplicate_setvar.xml",
+            "Error: setvar on symbol 'test' already exists on element 'setvar': ",
+        )
     }
 
     #[test]
@@ -230,6 +247,30 @@ mod protection_domain {
         check_error(
             "pd_duplicate_child_id.xml",
             "Error: duplicate id: 0 in protection domain: 'parent' @",
+        )
+    }
+
+    #[test]
+    fn test_small_stack_size() {
+        check_error(
+            "pd_small_stack_size.xml",
+            "Error: stack size must be between",
+        )
+    }
+
+    #[test]
+    fn test_unaligned_stack_size() {
+        check_error(
+            "pd_unaligned_stack_size.xml",
+            "Error: stack size must be aligned to the smallest page size",
+        )
+    }
+
+    #[test]
+    fn test_overlapping_maps() {
+        check_error(
+            "pd_overlapping_maps.xml",
+            "Error: map for 'mr2' has virtual address range [0x1000000..0x1001000) which overlaps with map for 'mr1' [0x1000000..0x1001000) in protection domain 'hello' @"
         )
     }
 }
@@ -362,6 +403,14 @@ mod system {
         check_error(
             "sys_map_not_aligned.xml",
             "Error: invalid vaddr alignment on 'map' @ ",
+        )
+    }
+
+    #[test]
+    fn test_map_too_high() {
+        check_error(
+            "sys_map_too_high.xml",
+            "Error: vaddr (0x1000000000000000) must be less than 0xfffffff000 on element 'map'",
         )
     }
 

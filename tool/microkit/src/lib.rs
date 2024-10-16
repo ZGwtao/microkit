@@ -6,8 +6,8 @@
 
 pub mod elf;
 pub mod loader;
+pub mod sdf;
 pub mod sel4;
-pub mod sysxml;
 pub mod util;
 
 use sel4::BootInfo;
@@ -20,7 +20,7 @@ pub const MAX_PDS: usize = 63;
 // It should be noted that if you were to change the value of
 // the maximum PD name length, you would also have to change
 // the monitor and libmicrokit.
-pub const PD_MAX_NAME_LENGTH: usize = 16;
+pub const PD_MAX_NAME_LENGTH: usize = 64;
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct UntypedObject {
@@ -114,8 +114,7 @@ impl MemoryRegion {
         self.end - self.base
     }
 
-    pub fn aligned_power_of_two_regions(&self) -> Vec<MemoryRegion> {
-        let max_bits = 47;
+    pub fn aligned_power_of_two_regions(&self, max_bits: u64) -> Vec<MemoryRegion> {
         let mut regions = Vec::new();
         let mut base = self.base;
         let mut bits;
@@ -207,10 +206,10 @@ impl DisjointMemoryRegion {
         self.check();
     }
 
-    pub fn aligned_power_of_two_regions(&self) -> Vec<MemoryRegion> {
+    pub fn aligned_power_of_two_regions(&self, max_bits: u64) -> Vec<MemoryRegion> {
         let mut aligned_regions = Vec::new();
         for region in &self.regions {
-            aligned_regions.extend(region.aligned_power_of_two_regions());
+            aligned_regions.extend(region.aligned_power_of_two_regions(max_bits));
         }
 
         aligned_regions
@@ -218,11 +217,11 @@ impl DisjointMemoryRegion {
 
     /// Allocate region of 'size' bytes, returning the base address.
     /// The allocated region is removed from the disjoint memory region.
+    /// Allocation policy is simple first fit.
+    /// Possibly a 'best fit' policy would be better.
+    /// 'best' may be something that best matches a power-of-two
+    /// allocation
     pub fn allocate(&mut self, size: u64) -> u64 {
-        // Allocation policy is simple first fit.
-        // Possibly a 'best fit' policy would be better.
-        // 'best' may be something that best matches a power-of-two
-        // allocation
         let mut region_to_remove: Option<MemoryRegion> = None;
         for region in &self.regions {
             if size <= region.size() {
@@ -237,6 +236,27 @@ impl DisjointMemoryRegion {
                 region.base
             }
             None => panic!("Unable to allocate {} bytes", size),
+        }
+    }
+
+    pub fn allocate_from(&mut self, size: u64, lower_bound: u64) -> u64 {
+        let mut region_to_remove = None;
+        for region in &self.regions {
+            if size <= region.size() && region.base >= lower_bound {
+                region_to_remove = Some(*region);
+                break;
+            }
+        }
+
+        match region_to_remove {
+            Some(region) => {
+                self.remove_region(region.base, region.base + size);
+                region.base
+            }
+            None => panic!(
+                "Unable to allocate {} bytes from lower_bound 0x{:x}",
+                size, lower_bound
+            ),
         }
     }
 }

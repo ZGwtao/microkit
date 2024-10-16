@@ -60,7 +60,6 @@ pub fn is_power_of_two(n: u64) -> bool {
 
 /// Mask out (set to zero) the lower bits from n
 pub fn mask_bits(n: u64, bits: u64) -> u64 {
-    assert!(n > 0);
     (n >> bits) << bits
 }
 
@@ -86,7 +85,7 @@ pub fn objects_adjacent(objects: &[Object]) -> bool {
 /// 'strict' means that it must be simply represented.
 ///  Specifically, it must be a multiple of standard power-of-two.
 ///  (e.g. KiB, MiB, GiB, TiB, PiB, EiB)
-pub fn human_size_strict(size: u64) -> String {
+pub fn human_size_strict(size: u64) -> (String, &'static str) {
     for (bits, label) in [
         (60, "EiB"),
         (50, "PiB"),
@@ -111,7 +110,7 @@ pub fn human_size_strict(size: u64) -> String {
             } else {
                 count = size;
             }
-            return format!("{} {}", comma_sep_u64(count), label);
+            return (comma_sep_u64(count), label);
         }
     }
 
@@ -134,6 +133,15 @@ pub fn comma_sep_u64(n: u64) -> String {
 
 pub fn comma_sep_usize(n: usize) -> String {
     comma_sep_u64(n as u64)
+}
+
+pub fn json_str<'a>(json: &'a serde_json::Value, field: &'static str) -> Result<&'a str, String> {
+    match json.get(field) {
+        Some(value) => Ok(value
+            .as_str()
+            .unwrap_or_else(|| panic!("JSON field '{}' is not a string", field))),
+        None => Err(format!("JSON field '{}' does not exist", field)),
+    }
 }
 
 pub fn json_str_as_u64(json: &serde_json::Value, field: &'static str) -> Result<u64, String> {

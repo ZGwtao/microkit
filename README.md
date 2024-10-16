@@ -43,9 +43,11 @@ Please file an issue if additional packages are required.
 * cmake
 * ninja-build
 * ARM GCC compiler for none-elf; version 12.2.1 20221205
+* RISC-V GCC compiler for unknown-elf; version 13.2.0
 * device tree compiler
 * xmllint
 * qemu-system-aarch64
+* qemu-system-riscv64
 
 To build the documentation you also need
 * pandoc
@@ -64,7 +66,8 @@ On a Debian-like system you can do:
         pandoc texlive-latex-base texlive-latex-recommended \
         texlive-fonts-recommended texlive-fonts-extra \
         python3.9 python3.9-venv \
-        qemu-system-arm
+        qemu-system-arm qemu-system-misc \
+        gcc-riscv64-unknown-elf
 
 If you do not have Python 3.9 available, you can get it via the
 *deadsnakes* PPA: https://launchpad.net/~deadsnakes/+archive/ubuntu/ppa
@@ -77,7 +80,9 @@ To use this:
 On macOS, with the [Homebrew](https://brew.sh) package manager you can do:
 
     $ curl https://sh.rustup.rs -sSf | sh
-    $ brew install pandoc cmake dtc ninja qemu libxml2 python@3.9 coreutils texlive qemu
+    $ brew tap riscv-software-src/riscv
+    $ brew install riscv-tools
+    $ brew install pandoc cmake dtc ninja libxml2 python@3.9 coreutils texlive qemu
 
 Additonally, a number of Python libraries are needed.
 These should be installed using `pip`.
@@ -118,7 +123,7 @@ Please clone seL4 from:
 
 The correct branch to use is `microkit`.
 
-Testing has been performed using commit `0cdbffec9cf6b4c7c9c57971cbee5a24a70c8fd0`.
+Testing has been performed using commit `4cae30a6ef166a378d4d23697b00106ce7e4e76f`.
 
 ## Building the SDK
 
@@ -179,6 +184,8 @@ The currently supported boards are:
 * odroidc2
 * odroidc4
 * qemu_virt_aarch64
+* qemu_virt_riscv64
+* star64
 * tqma8xqp1gb
 * zcu102
 
@@ -186,6 +193,7 @@ The currently supported configurations are:
 
 * release
 * debug
+* benchmark
 
 ## Supported Boards
 
@@ -193,11 +201,4 @@ For documentation on each supported board see the [manual](https://github.com/se
 
 ## Supported Configurations
 
-## Release
-
-In release configuration the loader, kernel and monitor do *not* perform any direct serial output.
-
-
-## Debug
-
-The debug configuration includes basic print output form the loader, kernel and monitor.
+For documentation on each supported board see the [manual](https://github.com/seL4/microkit/blob/main/docs/manual.md#configurations-config).

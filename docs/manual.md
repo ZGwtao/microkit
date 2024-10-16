@@ -4,7 +4,7 @@
 -->
 
 ---
-title: Microkit User Manual (v1.3.0)
+title: Microkit User Manual (v1.4.1-dev)
 documentclass: article
 classoption:
 - english
@@ -182,8 +182,11 @@ The main difference between a VM and a PD is that VMs have a higher privilege le
 guest operations and have their own user-space programs at a separate exception level.
 
 The virtual machine is always a child of a PD. Exceptions caused by the virtual machine are delivered to the parent PD
-through the `fault` entry point. Each virtual machine has a 'virtual CPU' associated with it which is used to identify
-the fault. At the moment, all VMs only have a single virtual CPU but in the future multi-vCPU VMs will be allowed.
+through the `fault` entry point.
+
+Each virtual machine has a number of 'virtual CPU's associated with it. Each virtual CPU (vCPU) that belongs to a
+virtual machine has its own thread of execution. A vCPU also has an identifier which is used to know which vCPU caused
+the invocation of the `fault` entry point.
 
 The parent PD is responsible for starting and managing the virtual machine. Microkit provides the abstractions in
 order to manage the virtual machine through seL4 but there is typically a non-trivial amount
@@ -313,8 +316,8 @@ handler via the `fault` entry point. It is then up to the parent to decide how t
 Microkit is distributed as a software development kit (SDK).
 
 The SDK includes support for one or more *boards*.
-Two *configurations* are supported for each board: *debug* and *release*.
-The *debug* configuration includes a debug build of the seL4 kernel to allow console debug output using the kernel's UART driver.
+Three *configurations* are supported for each board: *debug*, *release*, and *benchmark*.
+See [the Configurations section](#config) for more details.
 
 The SDK contains:
 
@@ -336,6 +339,23 @@ The user is free to build their system using whatever build system is deemed mos
 The Microkit tool should be invoked by the system build process to transform a system description (and any referenced program images) into an image file which can be loaded by the target board's bootloader.
 
 The ELF files provided as program images should be standard ELF files and have been linked against the provided libmicrokit.
+
+## Configurations {#config}
+
+## Debug
+
+The *debug* configuration includes a debug build of the seL4 kernel to allow console debug output using the kernel's UART driver.
+
+## Release
+
+The *release* configuration is a release build of the seL4 kernel and is intended for production builds. The loader, monitor, and
+kernel do *not* perform any serial output.
+
+## Benchmark
+
+The *benchmark* configuration uses a build of the seL4 kernel that exports the hardware's performance monitoring unit (PMU) to PDs.
+The kernel also tracks information about CPU utilisation. This benchmark configuration exists due a limitation of the seL4 kernel
+and is intended to be removed once [RFC-16 is implemented](https://github.com/seL4/rfcs/pull/22).
 
 ## System Requirements
 
@@ -404,6 +424,8 @@ If the protection domain has children it must also implement:
     seL4_Word microkit_msginfo_get_label(microkit_msginfo msginfo);
     seL4_Word microkit_msginfo_get_count(microkit_msginfo msginfo);
     void microkit_irq_ack(microkit_channel ch);
+    void microkit_deferred_notify(microkit_channel ch);
+    void microkit_deferred_irq_ack(microkit_channel ch);
     void microkit_pd_restart(microkit_child pd, seL4_Word entry_point);
     void microkit_pd_stop(microkit_child pd);
     void microkit_mr_set(seL4_Uint8 mr, seL4_Word value);
@@ -416,6 +438,7 @@ If the protection domain has children it must also implement:
     void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq);
     seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg);
     void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value);
+    void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response);
 
 
 ## `void init(void)`
@@ -494,6 +517,28 @@ Channel identifiers are specified in the system configuration.
 
 Acknowledge the interrupt identified by the specified channel.
 
+## `void microkit_deferred_notify(microkit_channel ch)`
+
+The same as `microkit_notify` but will instead not actually perform the notify until
+the entry point where `microkit_deferred_notify` was called returns.
+
+It is important to note that only a single 'deferred' API call can be made within the
+same entry point.
+
+The purpose of this API is for performance critical code as this API saves
+a kernel system call.
+
+## `void microkit_deferred_irq_ack(microkit_channel ch)`
+
+The same as `microkit_irq_ack` but will instead not actually perform the IRQ acknowledge
+until the entry point where `microkit_deferred_irq_ack` was called returns.
+
+It is important to note that only a single 'deferred' API call can be made within the
+same entry point.
+
+The purpose of this API is for performance critical code as this API saves
+a kernel system call.
+
 ## `void microkit_pd_restart(microkit_child pd, uintptr_t entry_point)`
 
 Restart the execution of a child protection domain with ID `pd` at the given `entry_point`.
@@ -561,6 +606,16 @@ Write to a register for a given virtual CPU with ID `vcpu`. The `reg` argument i
 register that is written to. The `value` argument is what the register will be set to.
 The list of registers is defined by the enum `seL4_VCPUReg` in the seL4 source code.
 
+## `void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)`
+
+This API is available only on ARM and only when seL4 has been configured to enable the
+`KernelAllowSMCCalls` option.
+
+The API takes in arguments for a Secure Monitor Call which will be performed by seL4. Any
+response values will be placed into the `response` structure.
+
+The `seL4_ARM_SMCContext` structure contains fields for registers x0 to x7.
+
 # System Description File {#sysdesc}
 
 This section describes the format of the System Description File (SDF).
@@ -588,6 +643,9 @@ It supports the following attributes:
 * `budget`: (optional) The PD's budget in microseconds; defaults to 1,000.
 * `period`: (optional) The PD's period in microseconds; must not be smaller than the budget; defaults to the budget.
 * `passive`: (optional) Indicates that the protection domain will be passive and thus have its scheduling context removed after initialisation; defaults to false.
+* `stack_size`: (optional) Number of bytes that will be used for the PD's stack.
+  Must be be between 4KiB and 16MiB and be 4K page-aligned. Defaults to 4KiB.
+* `smc`: (optional, only on ARM) Allow the PD to give an SMC call for the kernel to perform. Only available when the kernel has been configured with `KernelAllowSMCCalls`. Defaults to false.
 
 Additionally, it supports the following child elements:
 
@@ -605,8 +663,8 @@ The `map` element has the following attributes:
 * `mr`: Identifies the memory region to map.
 * `vaddr`: Identifies the virtual address at which to map the memory region.
 * `perms`: Identifies the permissions with which to map the memory region. Can be a combination of `r` (read), `w` (write), and `x` (eXecute), with the exception of a write-only mapping (just `w`).
-* `cached`: Determines if mapped with caching enabled or disabled. Defaults to `true`.
-* `setvar_vaddr`: Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
+* `cached`: (optional) Determines if mapped with caching enabled or disabled. Defaults to `true`.
+* `setvar_vaddr`: (optional) Specifies a symbol in the program image. This symbol will be rewritten with the virtual address of the memory region.
 
 The `irq` element has the following attributes:
 
@@ -632,8 +690,7 @@ The `virtual_machine` element has the following attributes:
 
 Additionally, it supports the following child elements:
 
-* `vcpu`: (exactly one) Describes the virtual CPU that will be tied to the virtual machine. At the moment only one
-                        vCPU is supported and so only one of these elements can exist for a virtual machine.
+* `vcpu`: (one or more) Describes the virtual CPU that will be tied to the virtual machine.
 * `map`: (zero or more) Describes mapping of memory regions into the virtual machine.
 
 The `vcpu` element has a single `id` attribute defining the identifier used for the virutal machine's vCPU.
@@ -662,6 +719,11 @@ Below are the available page sizes for each architecture that Microkit supports.
 * 0x1000 (4KiB)
 * 0x200000 (2MiB)
 
+#### RISC-V 64-bit
+
+* 0x1000 (4KiB)
+* 0x200000 (2MiB)
+
 ## `channel`
 
 The `channel` element has exactly two `end` children elements for specifying the two PDs associated with the channel.
@@ -684,6 +746,12 @@ Microkit produces a raw binary file, so when using U-Boot you must execute the i
 
     => go 0x41000000
 
+## i.MX8MP-EVK
+
+Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
+
+    => go 0x41000000
+
 ## i.MX8MQ-EVK
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
@@ -696,7 +764,7 @@ The MaaXBoard is a low-cost ARM SBC based on the NXP i.MX8MQ system-on-chip.
 
 Microkit produces a raw binary file, so when using U-Boot you must execute the image using:
 
-    => go 0x40480000
+    => go 0x50000000
 
 ## Odroid-C2
 
@@ -800,6 +868,47 @@ You can use the following command to simulate a Microkit system:
 You can find more about the QEMU virt platform in the
 [QEMU documentation](https://www.qemu.org/docs/master/system/target-arm.html).
 
+## QEMU virt (RISC-V 64-bit)
+
+Support is available for the virtual RISC-V (64-bit) QEMU platform.
+This is a platform that is not based on any specific SoC or hardware platform
+and is intended for simulating systems for development or testing.
+
+It should be noted that the platform support is configured with 2GB of main memory.
+
+You can use the following command to simulate a Microkit system:
+
+    $ qemu-system-riscv64 \
+        -machine virt \
+        -nographic \
+        -serial mon:stdio \
+        -kernel [SYSTEM IMAGE] \
+        -m size=2G
+
+QEMU will start the system image using its packaged version of OpenSBI.
+
+You can find more about the QEMU virt platform in the
+[QEMU documentation](https://www.qemu.org/docs/master/system/target-riscv.html).
+
+## Pine64 Star64
+
+Support is available for the Pine64 Star64 platform which is based on the
+StarFive JH7110 SoC.
+
+The platform has a 4GB and 8GB model, we assume the 4GB model.
+
+The default boot flow of the Star64 is:
+1. OpenSBI
+2. U-Boot
+3. Operating System
+
+This means that the system image that Microkit produces does not need to be explicitly
+packaged with an SBI implementation such as OpenSBI.
+
+To execute the system image produced by Microkit, execute the following command in U-Boot:
+
+    => go 0x60000000
+
 ## ZCU102
 
 Initial support is available for the Xilinx ZCU102.
@@ -836,8 +945,7 @@ To avoid this behaviour, the call to `armv8_switch_to_el1` should be replaced wi
 
 ## Adding Platform Support
 
-The following section is a guide for adding support for a new platform to Microkit. Currently only AArch64
-is supported in Microkit, so this guide assumes you are trying to add support for an AArch64 platform.
+The following section is a guide for adding support for a new platform to Microkit.
 
 ### Prerequisites
 
@@ -859,6 +967,8 @@ loads the image to). This means that the address is restricted to the platform's
 The other component of Microkit that is platform dependent is the loader itself. The loader will attempt to access
 the UART for debug output which requires a basic `putc` implementation. The UART device used in the loader should be
 the same as what is used for the seL4 kernel debug output.
+
+It should be noted that on RISC-V platforms, the SBI will be used for `putc` so no porting is necessary.
 
 Once you have patched the loader and the SDK build script, there should be no other changes required to have a working
 platform port. It is a good idea at this point to boot a hello world system to confirm the port is working.

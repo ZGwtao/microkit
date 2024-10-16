@@ -4,7 +4,7 @@
 // SPDX-License-Identifier: BSD-2-Clause
 //
 
-use crate::sel4::{Arch, ArmIrqTrigger, Config, PageSize};
+use crate::sel4::{Config, IrqTrigger, PageSize};
 use crate::util::str_to_bool;
 use crate::MAX_PDS;
 use std::hash::{Hash, Hasher};
@@ -41,6 +41,11 @@ const PD_MAX_PRIORITY: u8 = 254;
 /// In microseconds
 const BUDGET_DEFAULT: u64 = 1000;
 
+/// Default to a stack size of a single page
+const PD_DEFAULT_STACK_SIZE: u64 = 0x1000;
+const PD_MIN_STACK_SIZE: u64 = 0x1000;
+const PD_MAX_STACK_SIZE: u64 = 1024 * 1024 * 16;
+
 /// The purpose of this function is to parse an integer that could
 /// either be in decimal or hex format, unlike the normal parsing
 /// functionality that the Rust standard library provides.
@@ -70,23 +75,6 @@ fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String
     format!("{}:{}:{}", xml_sdf.filename, pos.row, pos.col)
 }
 
-/// There are some platform-specific properties that must be known when parsing the
-/// SDF for error-checking and validation, these go in this struct.
-pub struct PlatformDescription {
-    /// Note that we have the invariant that page sizes are be ordered by size
-    page_sizes: [u64; 2],
-}
-
-impl PlatformDescription {
-    pub const fn new(kernel_config: &Config) -> PlatformDescription {
-        let page_sizes = match kernel_config.arch {
-            Arch::Aarch64 => [0x1000, 0x200_000],
-        };
-
-        PlatformDescription { page_sizes }
-    }
-}
-
 #[repr(u8)]
 pub enum SysMapPerms {
     Read = 1,
@@ -112,6 +100,7 @@ pub struct SysMemoryRegion {
     pub page_size: PageSize,
     pub page_count: u64,
     pub phys_addr: Option<u64>,
+    pub text_pos: Option<roxmltree::TextPos>,
 }
 
 impl SysMemoryRegion {
@@ -124,7 +113,7 @@ impl SysMemoryRegion {
 pub struct SysIrq {
     pub irq: u64,
     pub id: u64,
-    pub trigger: ArmIrqTrigger,
+    pub trigger: IrqTrigger,
 }
 
 // The use of SysSetVar depends on the context. In some
@@ -155,6 +144,8 @@ pub struct ProtectionDomain {
     pub period: u64,
     pub pp: bool,
     pub passive: bool,
+    pub stack_size: u64,
+    pub smc: bool,
     pub program_image: PathBuf,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
@@ -173,8 +164,7 @@ pub struct ProtectionDomain {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct VirtualMachine {
-    // Right now virtual machines are limited to a single vCPU
-    pub vcpu: VirtualCpu,
+    pub vcpus: Vec<VirtualCpu>,
     pub name: String,
     pub maps: Vec<SysMap>,
     pub priority: u8,
@@ -208,6 +198,7 @@ impl SysMap {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         allow_setvar: bool,
+        max_vaddr: u64,
     ) -> Result<SysMap, String> {
         let mut attrs = vec!["mr", "vaddr", "perms", "cached"];
         if allow_setvar {
@@ -217,6 +208,15 @@ impl SysMap {
 
         let mr = checked_lookup(xml_sdf, node, "mr")?.to_string();
         let vaddr = sdf_parse_number(checked_lookup(xml_sdf, node, "vaddr")?, node)?;
+
+        if vaddr >= max_vaddr {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!("vaddr (0x{:x}) must be less than 0x{:x}", vaddr, max_vaddr),
+            ));
+        }
+
         let perms = if let Some(xml_perms) = node.attribute("perms") {
             match SysMapPerms::from_str(xml_perms) {
                 Ok(parsed_perms) => parsed_perms,
@@ -274,11 +274,23 @@ impl ProtectionDomain {
     }
 
     fn from_xml(
+        config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         is_child: bool,
     ) -> Result<ProtectionDomain, String> {
-        let mut attrs = vec!["name", "priority", "pp", "budget", "period", "passive"];
+        let mut attrs = vec![
+            "name",
+            "priority",
+            "pp",
+            "budget",
+            "period",
+            "passive",
+            "stack_size",
+            // The SMC field is only available in certain configurations
+            // but we do the error-checking further down.
+            "smc",
+        ];
         if is_child {
             attrs.push("id");
         }
@@ -347,9 +359,69 @@ impl ProtectionDomain {
             false
         };
 
+        let stack_size = if let Some(xml_stack_size) = node.attribute("stack_size") {
+            sdf_parse_number(xml_stack_size, node)?
+        } else {
+            PD_DEFAULT_STACK_SIZE
+        };
+
+        let smc = if let Some(xml_smc) = node.attribute("smc") {
+            match str_to_bool(xml_smc) {
+                Some(val) => val,
+                None => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "smc must be 'true' or 'false'".to_string(),
+                    ))
+                }
+            }
+        } else {
+            false
+        };
+
+        if smc {
+            match config.arm_smc {
+                Some(smc_allowed) => {
+                    if !smc_allowed {
+                        return Err(value_error(xml_sdf, node, "Using SMC support without ARM SMC forwarding support enabled for this platform".to_string()));
+                    }
+                }
+                None => {
+                    return Err(
+                        "ARM SMC forwarding support is not available for this architecture"
+                            .to_string(),
+                    )
+                }
+            }
+        }
+
+        #[allow(clippy::manual_range_contains)]
+        if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "stack size must be between 0x{:x} bytes and 0x{:x} bytes",
+                    PD_MIN_STACK_SIZE, PD_MAX_STACK_SIZE
+                ),
+            ));
+        }
+
+        if stack_size % config.page_sizes()[0] != 0 {
+            return Err(value_error(
+                xml_sdf,
+                node,
+                format!(
+                    "stack size must be aligned to the smallest page size, {} bytes",
+                    config.page_sizes()[0]
+                ),
+            ));
+        }
+
         let mut maps = Vec::new();
         let mut irqs = Vec::new();
-        let mut setvars = Vec::new();
+        let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
 
         let mut program_image = None;
@@ -390,9 +462,21 @@ impl ProtectionDomain {
                     program_image = Some(Path::new(program_image_path).to_path_buf());
                 }
                 "map" => {
-                    let map = SysMap::from_xml(xml_sdf, &child, true)?;
+                    let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
+                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr)?;
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
+                        // Check that the symbol does not already exist
+                        for setvar in &setvars {
+                            if setvar_vaddr == setvar.symbol {
+                                return Err(value_error(
+                                    xml_sdf,
+                                    &child,
+                                    format!("setvar on symbol '{}' already exists", setvar_vaddr),
+                                ));
+                            }
+                        }
+
                         setvars.push(SysSetVar {
                             symbol: setvar_vaddr.to_string(),
                             region_paddr: None,
@@ -423,8 +507,8 @@ impl ProtectionDomain {
 
                     let trigger = if let Some(trigger_str) = child.attribute("trigger") {
                         match trigger_str {
-                            "level" => ArmIrqTrigger::Level,
-                            "edge" => ArmIrqTrigger::Edge,
+                            "level" => IrqTrigger::Level,
+                            "edge" => IrqTrigger::Edge,
                             _ => {
                                 return Err(value_error(
                                     xml_sdf,
@@ -435,7 +519,7 @@ impl ProtectionDomain {
                         }
                     } else {
                         // Default the level triggered
-                        ArmIrqTrigger::Level
+                        IrqTrigger::Level
                     };
 
                     let irq = SysIrq {
@@ -450,6 +534,16 @@ impl ProtectionDomain {
                     let symbol = checked_lookup(xml_sdf, &child, "symbol")?.to_string();
                     let region_paddr =
                         Some(checked_lookup(xml_sdf, &child, "region_paddr")?.to_string());
+                    // Check that the symbol does not already exist
+                    for setvar in &setvars {
+                        if symbol == setvar.symbol {
+                            return Err(value_error(
+                                xml_sdf,
+                                &child,
+                                format!("setvar on symbol '{}' already exists", symbol),
+                            ));
+                        }
+                    }
                     setvars.push(SysSetVar {
                         symbol,
                         region_paddr,
@@ -457,7 +551,7 @@ impl ProtectionDomain {
                     })
                 }
                 "protection_domain" => {
-                    child_pds.push(ProtectionDomain::from_xml(xml_sdf, &child, true)?)
+                    child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true)?)
                 }
                 "virtual_machine" => {
                     if virtual_machine.is_some() {
@@ -468,7 +562,7 @@ impl ProtectionDomain {
                         ));
                     }
 
-                    virtual_machine = Some(VirtualMachine::from_xml(xml_sdf, &child)?);
+                    virtual_machine = Some(VirtualMachine::from_xml(config, xml_sdf, &child)?);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
@@ -500,6 +594,8 @@ impl ProtectionDomain {
             period,
             pp,
             passive,
+            stack_size,
+            smc,
             program_image: program_image.unwrap(),
             maps,
             irqs,
@@ -515,6 +611,7 @@ impl ProtectionDomain {
 
 impl VirtualMachine {
     fn from_xml(
+        config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
     ) -> Result<VirtualMachine, String> {
@@ -550,7 +647,7 @@ impl VirtualMachine {
             0
         };
 
-        let mut vcpu = None;
+        let mut vcpus: Vec<VirtualCpu> = Vec::new();
         let mut maps = Vec::new();
         for child in node.children() {
             if !child.is_element() {
@@ -560,14 +657,6 @@ impl VirtualMachine {
             let child_name = child.tag_name().name();
             match child_name {
                 "vcpu" => {
-                    if vcpu.is_some() {
-                        return Err(value_error(
-                            xml_sdf,
-                            node,
-                            "vcpu must only be specified once".to_string(),
-                        ));
-                    }
-
                     check_attributes(xml_sdf, &child, &["id"])?;
                     let id = checked_lookup(xml_sdf, &child, "id")?
                         .parse::<u64>()
@@ -579,12 +668,25 @@ impl VirtualMachine {
                             format!("id must be < {}", VCPU_MAX_ID + 1),
                         ));
                     }
-                    vcpu = Some(VirtualCpu { id });
+
+                    for vcpu in &vcpus {
+                        if vcpu.id == id {
+                            let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                            return Err(format!(
+                                "Error: duplicate vcpu id {} in virtual machine '{}' @ {}",
+                                id,
+                                name,
+                                loc_string(xml_sdf, pos)
+                            ));
+                        }
+                    }
+
+                    vcpus.push(VirtualCpu { id });
                 }
                 "map" => {
                     // Virtual machines do not have program images and so we do not allow
                     // setvar_vaddr on SysMap
-                    let map = SysMap::from_xml(xml_sdf, &child, false)?;
+                    let map = SysMap::from_xml(xml_sdf, &child, false, config.vm_map_max_vaddr())?;
                     maps.push(map);
                 }
                 _ => {
@@ -598,7 +700,7 @@ impl VirtualMachine {
             }
         }
 
-        if vcpu.is_none() {
+        if vcpus.is_empty() {
             return Err(format!(
                 "Error: missing 'vcpu' element on virtual_machine: '{}'",
                 name
@@ -606,7 +708,7 @@ impl VirtualMachine {
         }
 
         Ok(VirtualMachine {
-            vcpu: vcpu.unwrap(),
+            vcpus,
             name,
             maps,
             // This downcast is safe as we have checked that this is less than
@@ -620,9 +722,9 @@ impl VirtualMachine {
 
 impl SysMemoryRegion {
     fn from_xml(
+        config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
-        plat_desc: &PlatformDescription,
     ) -> Result<SysMemoryRegion, String> {
         check_attributes(xml_sdf, node, &["name", "size", "page_size", "phys_addr"])?;
 
@@ -633,10 +735,10 @@ impl SysMemoryRegion {
             sdf_parse_number(xml_page_size, node)?
         } else {
             // Default to the minimum page size
-            plat_desc.page_sizes[0]
+            config.page_sizes()[0]
         };
 
-        let page_size_valid = plat_desc.page_sizes.contains(&page_size);
+        let page_size_valid = config.page_sizes().contains(&page_size);
         if !page_size_valid {
             return Err(value_error(
                 xml_sdf,
@@ -675,6 +777,7 @@ impl SysMemoryRegion {
             page_size: page_size.into(),
             page_count,
             phys_addr,
+            text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
         })
     }
 }
@@ -860,50 +963,56 @@ fn check_no_text(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Resu
     Ok(())
 }
 
+/// Take a PD and return a vector with the given PD at the start and all of the children PDs following.
+///
+/// For example if PD A had children B, C then we would have [A, B, C].
+/// If we had the same example but child B also had a child D, we would have [A, B, D, C].
 fn pd_tree_to_list(
     xml_sdf: &XmlSystemDescription,
-    mut root_pd: ProtectionDomain,
-    parent: bool,
+    mut pd: ProtectionDomain,
     idx: usize,
 ) -> Result<Vec<ProtectionDomain>, String> {
     let mut child_ids = vec![];
-    for child_pd in &root_pd.child_pds {
+    for child_pd in &pd.child_pds {
         let child_id = child_pd.id.unwrap();
         if child_ids.contains(&child_id) {
             return Err(format!(
                 "Error: duplicate id: {} in protection domain: '{}' @ {}",
                 child_id,
-                root_pd.name,
+                pd.name,
                 loc_string(xml_sdf, child_pd.text_pos)
             ));
         }
-        // Also check that the child ID does not clash with the virtual machine ID, if the PD has one
-        if let Some(vm) = &root_pd.virtual_machine {
-            if child_id == vm.vcpu.id {
-                return Err(format!("Error: duplicate id: {} clashes with virtual machine vcpu id in protection domain: '{}' @ {}",
-                                    child_id, root_pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+        // Also check that the child ID does not clash with any vCPU IDs, if the PD has a virtual machine
+        if let Some(vm) = &pd.virtual_machine {
+            for vcpu in &vm.vcpus {
+                if child_id == vcpu.id {
+                    return Err(format!("Error: duplicate id: {} clashes with virtual machine vcpu id in protection domain: '{}' @ {}",
+                                        child_id, pd.name, loc_string(xml_sdf, child_pd.text_pos)));
+                }
             }
         }
         child_ids.push(child_id);
     }
 
-    if parent {
-        root_pd.parent = Some(idx);
-    } else {
-        root_pd.parent = None;
-    }
     let mut new_child_pds = vec![];
-    let child_pds: Vec<_> = root_pd.child_pds.drain(0..).collect();
-    for child_pd in child_pds {
+    let child_pds: Vec<_> = pd.child_pds.drain(0..).collect();
+    for mut child_pd in child_pds {
+        // The parent PD's index is set for each child. We then pass the index relative to the *total*
+        // list to any nested children so their parent index can be set to the position of this child.
+        child_pd.parent = Some(idx);
         new_child_pds.extend(pd_tree_to_list(
             xml_sdf,
             child_pd,
-            true,
-            idx + new_child_pds.len(),
+            // We need to pass the position of this current child PD in the global list.
+            // `idx` is this child's parent index in the global list, so we need to add
+            // the position of this child to `idx` which will be the number of extra child
+            // PDs we've just processed, plus one for the actual entry of this child.
+            idx + new_child_pds.len() + 1,
         )?);
     }
 
-    let mut all = vec![root_pd];
+    let mut all = vec![pd];
     all.extend(new_child_pds);
 
     Ok(all)
@@ -921,17 +1030,16 @@ fn pd_flatten(
     let mut all_pds = vec![];
 
     for pd in pds {
-        all_pds.extend(pd_tree_to_list(xml_sdf, pd, false, all_pds.len())?);
+        // These are all root PDs, so should not have parents.
+        assert!(pd.parent.is_none());
+        // We provide the index of the PD in the entire PD list
+        all_pds.extend(pd_tree_to_list(xml_sdf, pd, all_pds.len())?);
     }
 
     Ok(all_pds)
 }
 
-pub fn parse(
-    filename: &str,
-    xml: &str,
-    plat_desc: &PlatformDescription,
-) -> Result<SystemDescription, String> {
+pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescription, String> {
     let doc = match roxmltree::Document::parse(xml) {
         Ok(doc) => doc,
         Err(err) => return Err(format!("Could not parse '{}': {}", filename, err)),
@@ -968,10 +1076,10 @@ pub fn parse(
         let child_name = child.tag_name().name();
         match child_name {
             "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(&xml_sdf, &child, false)?)
+                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false)?)
             }
             "channel" => channel_nodes.push(child),
-            "memory_region" => mrs.push(SysMemoryRegion::from_xml(&xml_sdf, &child, plat_desc)?),
+            "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
@@ -1090,6 +1198,7 @@ pub fn parse(
 
     // Ensure that all maps are correct
     for pd in &pds {
+        let mut checked_maps = Vec::with_capacity(pd.maps.len());
         for map in &pd.maps {
             let maybe_mr = mrs.iter().find(|mr| mr.name == map.mr);
             let pos = map.text_pos.unwrap();
@@ -1101,6 +1210,27 @@ pub fn parse(
                             loc_string(&xml_sdf, pos)
                         ));
                     }
+
+                    let map_start = map.vaddr;
+                    let map_end = map.vaddr + mr.size;
+                    for (name, start, end) in &checked_maps {
+                        if !(map_start >= *end || map_end <= *start) {
+                            return Err(
+                                format!(
+                                    "Error: map for '{}' has virtual address range [0x{:x}..0x{:x}) which overlaps with map for '{}' [0x{:x}..0x{:x}) in protection domain '{}' @ {}",
+                                    map.mr,
+                                    map_start,
+                                    map_end,
+                                    name,
+                                    start,
+                                    end,
+                                    pd.name,
+                                    loc_string(&xml_sdf, map.text_pos.unwrap())
+                                )
+                            );
+                        }
+                    }
+                    checked_maps.push((&map.mr, map_start, map_end));
                 }
                 None => {
                     return Err(format!(
@@ -1110,6 +1240,57 @@ pub fn parse(
                     ))
                 }
             };
+        }
+    }
+
+    // Ensure MRs with physical addresses do not overlap
+    let mut checked_mrs = Vec::with_capacity(mrs.len());
+    for mr in &mrs {
+        if let Some(phys_addr) = mr.phys_addr {
+            let mr_start = phys_addr;
+            let mr_end = phys_addr + mr.size;
+
+            for (name, start, end) in &checked_mrs {
+                if !(mr_start >= *end || mr_end <= *start) {
+                    let pos = mr.text_pos.unwrap();
+                    return Err(
+                        format!(
+                            "Error: memory region '{}' physical address range [0x{:x}..0x{:x}) overlaps with another memory region '{}' [0x{:x}..0x{:x}) @ {}",
+                            mr.name,
+                            mr_start,
+                            mr_end,
+                            name,
+                            start,
+                            end,
+                            loc_string(&xml_sdf, pos)
+                        )
+                    );
+                }
+            }
+
+            checked_mrs.push((&mr.name, mr_start, mr_end));
+        }
+    }
+
+    // Check that all MRs are used
+    let mut all_maps = vec![];
+    for pd in &pds {
+        all_maps.extend(&pd.maps);
+        if let Some(vm) = &pd.virtual_machine {
+            all_maps.extend(&vm.maps);
+        }
+    }
+    for mr in &mrs {
+        let mut found = false;
+        for map in &all_maps {
+            if map.mr == mr.name {
+                found = true;
+                break;
+            }
+        }
+
+        if !found {
+            println!("WARNING: unused memory region '{}'", mr.name);
         }
     }
 
