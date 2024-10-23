@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <microkit.h>
 
+uintptr_t user_program;
 static uint8_t restart_count = 0;
 
 static char decchar(unsigned int v)
