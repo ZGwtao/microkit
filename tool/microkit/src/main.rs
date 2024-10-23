@@ -3375,7 +3375,7 @@ fn main() -> Result<(), String> {
 
     let mut hasher = DefaultHasher::new();
     system.hash(&mut hasher);
-    println!("Hash of system description file: {}", hasher.finish());
+    println!("Hash of system description file: 0x{:x}", hasher.finish());
 
     let monitor_config = MonitorConfig {
         untyped_info_symbol_name: "untyped_info",
@@ -3419,8 +3419,8 @@ fn main() -> Result<(), String> {
             }
         } else {
             pd_elf_files.push(ElfFile::new()); // dummy elf file
-            eprintln!(
-                "Info: No program image for PD '{}', adding dummy ELF file.",
+            println!(
+                "Empty PD '{}' found (no program_image supplied), adding dummy ELF file.",
                 pd.name
             );
         }
