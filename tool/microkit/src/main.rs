@@ -3404,17 +3404,25 @@ fn main() -> Result<(), String> {
     // Get the elf files for each pd:
     let mut pd_elf_files = Vec::with_capacity(system.protection_domains.len());
     for pd in &system.protection_domains {
-        match get_full_path(&pd.program_image, &search_paths) {
-            Some(path) => {
-                let elf = ElfFile::from_path(&path).unwrap();
-                pd_elf_files.push(elf);
+        if let Some(program_image) = &pd.program_image {
+            match get_full_path(program_image, &search_paths) {
+                Some(path) => {
+                    let elf = ElfFile::from_path(&path).unwrap();
+                    pd_elf_files.push(elf);
+                }
+                None => {
+                    return Err(format!(
+                        "unable to find program image: '{}'",
+                        program_image.display()
+                    ))
+                }
             }
-            None => {
-                return Err(format!(
-                    "unable to find program image: '{}'",
-                    pd.program_image.display()
-                ))
-            }
+        } else {
+            pd_elf_files.push(ElfFile::new()); // dummy elf file
+            eprintln!(
+                "Info: No program image for PD '{}', adding dummy ELF file.",
+                pd.name
+            );
         }
     }
 

@@ -139,6 +139,15 @@ pub struct ElfFile {
 }
 
 impl ElfFile {
+    pub fn new() -> Self {
+        ElfFile {
+            word_size: 0,
+            entry: 0,
+            segments: Vec::new(),
+            symbols: HashMap::new(),
+        }
+    }
+    
     pub fn from_path(path: &Path) -> Result<ElfFile, String> {
         let bytes = match fs::read(path) {
             Ok(bytes) => bytes,
