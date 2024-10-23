@@ -466,6 +466,9 @@ pub fn pd_write_symbols(
     pd_setvar_values: &[Vec<u64>],
 ) -> Result<(), String> {
     for (i, pd) in pds.iter().enumerate() {
+        let Some(program_image) = &pd.program_image else {
+            continue;
+        };
         let elf = &mut pd_elf_files[i];
         let name = pd.name.as_bytes();
         let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
@@ -479,7 +482,7 @@ pub fn pd_write_symbols(
                 return Err(format!(
                     "No symbol named '{}' in ELF '{}' for PD '{}'",
                     setvar.symbol,
-                    pd.program_image.display(),
+                    program_image.display(),
                     pd.name
                 ));
             }
@@ -1300,6 +1303,7 @@ fn build_system(
     let mut pd_extra_maps: HashMap<&ProtectionDomain, Vec<SysMap>> = HashMap::new();
     for (i, pd) in system.protection_domains.iter().enumerate() {
         pd_elf_regions.push(Vec::with_capacity(pd_elf_files[i].segments.len()));
+        pd_extra_maps.insert(pd, vec![]);
         for (seg_idx, segment) in pd_elf_files[i].segments.iter().enumerate() {
             if !segment.loadable {
                 continue;
@@ -1348,11 +1352,7 @@ fn build_system(
                 cached: true,
                 text_pos: None,
             };
-            if let Some(extra_maps) = pd_extra_maps.get_mut(pd) {
-                extra_maps.push(mp);
-            } else {
-                pd_extra_maps.insert(pd, vec![mp]);
-            }
+            pd_extra_maps.get_mut(pd).unwrap().push(mp);
 
             // Add to extra_mrs at the end to avoid movement issues with the MR since it's used in
             // constructing the SysMap struct
@@ -1631,9 +1631,12 @@ fn build_system(
     let mut all_pd_ds: Vec<(usize, u64)> = Vec::new();
     let mut all_pd_pts: Vec<(usize, u64)> = Vec::new();
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
-        let (ipc_buffer_vaddr, _) = pd_elf_files[pd_idx]
-            .find_symbol(SYMBOL_IPC_BUFFER)
-            .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
+        let mut vaddrs = vec![];
+
+        if let Ok((ipc_buffer_vaddr, _)) = pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER) {
+            vaddrs.push((ipc_buffer_vaddr, PageSize::Small));
+        }
+
         let mut upper_directory_vaddrs = HashSet::new();
         let mut directory_vaddrs = HashSet::new();
         let mut page_table_vaddrs = HashSet::new();
@@ -1641,7 +1644,6 @@ fn build_system(
         // For each page, in each map determine we determine
         // which upper directory, directory and page table is resides
         // in, and then page sure this is set
-        let mut vaddrs = vec![(ipc_buffer_vaddr, PageSize::Small)];
         for map_set in [&pd.maps, &pd_extra_maps[pd]] {
             for map in map_set {
                 let mr = all_mr_by_name[map.mr.as_str()];
