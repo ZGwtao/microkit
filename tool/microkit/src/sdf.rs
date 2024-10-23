@@ -146,7 +146,7 @@ pub struct ProtectionDomain {
     pub passive: bool,
     pub stack_size: u64,
     pub smc: bool,
-    pub program_image: PathBuf,
+    pub program_image: Option<PathBuf>,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub setvars: Vec<SysSetVar>,
@@ -575,13 +575,6 @@ impl ProtectionDomain {
             }
         }
 
-        if program_image.is_none() {
-            return Err(format!(
-                "Error: missing 'program_image' element on protection_domain: '{}'",
-                name
-            ));
-        }
-
         let has_children = !child_pds.is_empty();
 
         Ok(ProtectionDomain {
@@ -596,7 +589,7 @@ impl ProtectionDomain {
             passive,
             stack_size,
             smc,
-            program_image: program_image.unwrap(),
+            program_image,
             maps,
             irqs,
             setvars,
