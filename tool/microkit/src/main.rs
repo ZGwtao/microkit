@@ -2590,19 +2590,18 @@ fn build_system(
         Arch::Riscv64 => RiscvVmAttributes::default() | RiscvVmAttributes::ExecuteNever as u64,
     };
     for pd_idx in 0..system.protection_domains.len() {
-        let (vaddr, _) = pd_elf_files[pd_idx]
-            .find_symbol(SYMBOL_IPC_BUFFER)
-            .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::PageMap {
-                page: ipc_buffer_objs[pd_idx].cap_addr,
-                vspace: pd_vspace_objs[pd_idx].cap_addr,
-                vaddr,
-                rights: Rights::Read as u64 | Rights::Write as u64,
-                attr: ipc_buffer_attr,
-            },
-        ));
+        if let Ok((vaddr, _)) = pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER) {
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::PageMap {
+                    page: ipc_buffer_objs[pd_idx].cap_addr,
+                    vspace: pd_vspace_objs[pd_idx].cap_addr,
+                    vaddr,
+                    rights: Rights::Read as u64 | Rights::Write as u64,
+                    attr: ipc_buffer_attr,
+                },
+            ));
+        }
     }
 
     // Initialise the TCBs
@@ -2755,17 +2754,16 @@ fn build_system(
 
     // Set IPC buffer
     for pd_idx in 0..system.protection_domains.len() {
-        let (ipc_buffer_vaddr, _) = pd_elf_files[pd_idx]
-            .find_symbol(SYMBOL_IPC_BUFFER)
-            .unwrap_or_else(|_| panic!("Could not find {}", SYMBOL_IPC_BUFFER));
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::TcbSetIpcBuffer {
-                tcb: tcb_objs[pd_idx].cap_addr,
-                buffer: ipc_buffer_vaddr,
-                buffer_frame: ipc_buffer_objs[pd_idx].cap_addr,
-            },
-        ));
+        if let Ok((ipc_buffer_vaddr, _)) = pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER) {
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::TcbSetIpcBuffer {
+                    tcb: tcb_objs[pd_idx].cap_addr,
+                    buffer: ipc_buffer_vaddr,
+                    buffer_frame: ipc_buffer_objs[pd_idx].cap_addr,
+                },
+            ));
+        }
     }
 
     // Set TCB registers (we only set the entry point)
