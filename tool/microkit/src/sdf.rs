@@ -575,6 +575,14 @@ impl ProtectionDomain {
             }
         }
 
+        // All root PDs must have a program_image supplied
+        if program_image.is_none() && !is_child {
+            return Err(format!(
+                "Error: missing 'program_image' element on protection_domain: '{}'",
+                name
+            ));
+        }
+
         let has_children = !child_pds.is_empty();
 
         Ok(ProtectionDomain {
