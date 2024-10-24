@@ -469,6 +469,7 @@ pub fn pd_write_symbols(
         let Some(program_image) = &pd.program_image else {
             continue;
         };
+        
         let elf = &mut pd_elf_files[i];
         let name = pd.name.as_bytes();
         let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
@@ -2738,7 +2739,11 @@ fn build_system(
     }
 
     // Set TCB registers (we only set the entry point)
-    for pd_idx in 0..system.protection_domains.len() {
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if pd.program_image.is_none() {
+            continue;
+        }
+
         let regs = match config.arch {
             Arch::Aarch64 => Aarch64Regs {
                 pc: pd_elf_files[pd_idx].entry,
@@ -2809,17 +2814,21 @@ fn build_system(
     }
 
     // Resume (start) all the threads that belong to PDs (VMs are not started upon system init)
-    let mut resume_invocation = Invocation::new(
-        config,
-        InvocationArgs::TcbResume {
-            tcb: tcb_objs[0].cap_addr,
-        },
-    );
-    resume_invocation.repeat(
-        system.protection_domains.len() as u32,
-        InvocationArgs::TcbResume { tcb: 1 },
-    );
-    system_invocations.push(resume_invocation);
+    // except empty PDs
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if pd.program_image.is_none() {
+            continue;
+        }
+
+        let resume_invocation = Invocation::new(
+            config,
+            InvocationArgs::TcbResume {
+                tcb: tcb_objs[pd_idx].cap_addr,
+            },
+        );
+
+        system_invocations.push(resume_invocation);
+    }
 
     // All of the objects are created at this point; we don't need both
     // the allocators from here.
