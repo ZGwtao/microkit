@@ -13,6 +13,7 @@
 
         <protection_domain name="receiver" id="1" priority="253">
             <program_image path="receiver.elf" />
+            <!-- remember to set execute perms for this mapping -->
             <map mr="user_program" vaddr="0x4000000" perms="rx" cached="false" />
         </protection_domain>
     </protection_domain_template>
