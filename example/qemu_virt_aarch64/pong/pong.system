@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2021, Breakaway Consulting Pty. Ltd.
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <protection_domain name="sender" priority="253">
+        <program_image path="sender.elf" />
+    </protection_domain>
+
+    <channel>
+        <end pd="sender" id="1" />
+        <end pd="receiver" id="2" />
+    </channel>
+
+    <protection_domain name="receiver" priority="254">
+        <program_image path="receiver.elf" />
+    </protection_domain>
+</system>

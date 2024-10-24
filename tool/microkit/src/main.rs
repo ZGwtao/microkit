@@ -887,6 +887,7 @@ fn build_system(
     system: &SystemDescription,
     invocation_table_size: u64,
     system_cnode_size: u64,
+    system_hash: u64,
 ) -> Result<BuiltSystem, String> {
     assert!(util::is_power_of_two(system_cnode_size));
     assert!(invocation_table_size % config.minimum_page_size == 0);
@@ -2862,12 +2863,6 @@ fn build_system(
         system_invocation.add_raw_invocation(config, &mut system_invocation_data);
     }
 
-    // Hash the system description for patching the trusted loader later on
-    let mut hasher = DefaultHasher::new();
-    system.hash(&mut hasher);
-    let system_hash = hasher.finish();
-    println!("System hash: 0x{:x}", system_hash);
-
     let mut pd_setvar_values: Vec<Vec<u64>> = vec![vec![]; system.protection_domains.len()];
     for (i, pd) in system.protection_domains.iter().enumerate() {
         for setvar in &pd.setvars {
@@ -3427,7 +3422,7 @@ fn main() -> Result<(), String> {
         } else {
             pd_elf_files.push(ElfFile::new()); // dummy elf file
             println!(
-                "Empty PD '{}' found (no program_image supplied), adding dummy ELF file.",
+                "Empty PD '{}' found (no program_image supplied), adding dummy ElfFile",
                 pd.name
             );
         }
@@ -3435,6 +3430,12 @@ fn main() -> Result<(), String> {
 
     let mut invocation_table_size = kernel_config.minimum_page_size;
     let mut system_cnode_size = 2;
+
+    // Hash the system description for patching the trusted loader later on
+    let mut hasher = DefaultHasher::new();
+    system.hash(&mut hasher);
+    let system_hash = hasher.finish();
+    println!("System hash: 0x{:x}", system_hash);
 
     let mut built_system;
     loop {
@@ -3446,6 +3447,7 @@ fn main() -> Result<(), String> {
             &system,
             invocation_table_size,
             system_cnode_size,
+            system_hash,
         )?;
         println!("BUILT: system_cnode_size={} built_system.number_of_system_caps={} invocation_table_size={} built_system.invocation_data_size={}",
                  system_cnode_size, built_system.number_of_system_caps, invocation_table_size, built_system.invocation_data_size);

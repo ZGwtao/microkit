@@ -5,4 +5,7 @@ qemu-system-aarch64 \
     -nographic \
     -serial mon:stdio \
     -device loader,file=tmp_build/loader.img,addr=0x70000000,cpu-num=0 \
+    -device loader,addr=0x90000000,data=0x61,data-len=1 \
     -m size=2G
+
+#     -device loader,file=tmp_build/sender.elf,addr=0x90000000 \

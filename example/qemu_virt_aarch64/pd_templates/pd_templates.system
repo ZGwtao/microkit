@@ -5,15 +5,15 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <memory_region name="user_program" size="0x200_000" page_size="0x200_000" />
+    <memory_region name="sender_program" size="0x200_000" page_size="0x200_000" phys_addr="0x90000000" />
     <memory_region name="child_pd" size="0x200_000" page_size="0x200_000" />
 
     <protection_domain_template name="trusted_loader" priority="254">
         <program_image path="trusted_loader.elf" />
-        <map mr="user_program" vaddr="0x400000" perms="r" cached="true" setvar_vaddr="user_program" />
+        <map mr="sender_program" vaddr="0x4000000" perms="r" cached="false" setvar_vaddr="sender_program" />
 
-        <protection_domain name="sender" id="1" priority="253">
-            <map mr="child_pd" vaddr="0x400000" perms="r" cached="true" />
+        <protection_domain name="receiver" id="1" priority="253">
+            <program_image path="receiver.elf" />
         </protection_domain>
     </protection_domain_template>
 
@@ -22,7 +22,7 @@
         <end pd="receiver" id="2" />
     </channel>
 
-    <protection_domain name="receiver" priority="252">
-        <program_image path="hello.elf" />
+    <protection_domain name="sender" priority="252">
+        <program_image path="sender.elf" />
     </protection_domain>
 </system>

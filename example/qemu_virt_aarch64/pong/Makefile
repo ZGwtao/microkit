@@ -28,13 +28,12 @@ LD := $(TOOLCHAIN)-ld
 AS := $(TOOLCHAIN)-as
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
-TRUSTED_LOADER_OBJS := trusted_loader.o
-RECEIVER_OBJS := receiver.o
 SENDER_OBJS := sender.o
+RECEIVER_OBJS := receiver.o
 
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 
-IMAGES := trusted_loader.elf receiver.elf sender.elf
+IMAGES := sender.elf receiver.elf
 CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 -Wall  -Wno-unused-function -Werror -I$(BOARD_DIR)/include
 LDFLAGS := -L$(BOARD_DIR)/lib
 LIBS := -lmicrokit -Tmicrokit.ld
@@ -50,14 +49,11 @@ $(BUILD_DIR)/%.o: %.c Makefile
 $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g -mcpu=$(CPU) $< -o $@
 
-$(BUILD_DIR)/trusted_loader.elf: $(addprefix $(BUILD_DIR)/, $(TRUSTED_LOADER_OBJS))
+$(BUILD_DIR)/sender.elf: $(addprefix $(BUILD_DIR)/, $(SENDER_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/receiver.elf: $(addprefix $(BUILD_DIR)/, $(RECEIVER_OBJS))
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(BUILD_DIR)/sender.elf: $(addprefix $(BUILD_DIR)/, $(SENDER_OBJS))
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
-
-$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) pd_templates.system
-	$(MICROKIT_TOOL) pd_templates.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
+$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) pong.system
+	$(MICROKIT_TOOL) pong.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)

@@ -6,7 +6,7 @@
 #include <stdint.h>
 #include <microkit.h>
 
-#define PROGNAME "hello: "
+#define PROGNAME "receiver: "
 
 void init(void)
 {
