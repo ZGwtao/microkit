@@ -2862,9 +2862,20 @@ fn build_system(
         system_invocation.add_raw_invocation(config, &mut system_invocation_data);
     }
 
+    // Hash the system description for patching the trusted loader later on
+    let mut hasher = DefaultHasher::new();
+    system.hash(&mut hasher);
+    let system_hash = hasher.finish();
+    println!("System hash: 0x{:x}", system_hash);
+
     let mut pd_setvar_values: Vec<Vec<u64>> = vec![vec![]; system.protection_domains.len()];
     for (i, pd) in system.protection_domains.iter().enumerate() {
         for setvar in &pd.setvars {
+            if setvar.symbol == "system_hash" {
+                pd_setvar_values[i].push(system_hash);
+                continue;
+            }
+
             assert!(setvar.region_paddr.is_some() || setvar.vaddr.is_some());
             assert!(!(setvar.region_paddr.is_some() && setvar.vaddr.is_some()));
 
@@ -3372,10 +3383,6 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
     };
-
-    let mut hasher = DefaultHasher::new();
-    system.hash(&mut hasher);
-    println!("Hash of system description file: 0x{:x}", hasher.finish());
 
     let monitor_config = MonitorConfig {
         untyped_info_symbol_name: "untyped_info",
