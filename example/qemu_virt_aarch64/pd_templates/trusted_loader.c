@@ -54,22 +54,23 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 
 seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)
 {
-    microkit_dbg_puts(PROGNAME "received fault message for child pd ");
-    put8(child);
+    microkit_dbg_puts(PROGNAME "Received fault message for child PD ");
+    putdec(child);
     microkit_dbg_puts("\n");
 
-    restart_count++;
-    if (restart_count < 10)
-    {
-        microkit_pd_restart(child, 0x200000);
-        microkit_dbg_puts(PROGNAME "restarted\n");
-    }
-    else
-    {
-        microkit_pd_stop(child);
-        microkit_dbg_puts(PROGNAME "too many restarts - PD stopped\n");
-    }
+    seL4_Word label = microkit_msginfo_get_label(msginfo);
+    seL4_Word fault_address = microkit_mr_get(seL4_UserException_FaultIP);
 
+    microkit_dbg_puts(PROGNAME "Fault label: ");
+    putdec(label);
+    microkit_dbg_puts("\n");
+
+    microkit_dbg_puts(PROGNAME "Fault address: ");
+    puthex(fault_address);
+    microkit_dbg_puts("\n");
+
+    microkit_pd_stop(child);
+    
     /* We explicitly restart the thread so we do not need to 'reply' to the fault. */
     return seL4_False;
 }
