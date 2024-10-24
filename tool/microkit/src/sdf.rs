@@ -278,6 +278,7 @@ impl ProtectionDomain {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         is_child: bool,
+        is_template: bool,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
             "name",
@@ -426,6 +427,15 @@ impl ProtectionDomain {
 
         let mut program_image = None;
         let mut virtual_machine = None;
+        
+        // Will also prevent users from using system_hash as a setvar name
+        if is_template {
+            setvars.push(SysSetVar {
+                symbol: "system_hash".to_string(),
+                region_paddr: None,
+                vaddr: None
+            })
+        }
 
         // Default to minimum priority
         let priority = if let Some(xml_priority) = node.attribute("priority") {
@@ -551,7 +561,10 @@ impl ProtectionDomain {
                     })
                 }
                 "protection_domain" => {
-                    child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true)?)
+                    child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true, false)?)
+                }
+                "protection_domain_template" => {
+                    child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true, true)?)
                 }
                 "virtual_machine" => {
                     if virtual_machine.is_some() {
@@ -1077,7 +1090,10 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         let child_name = child.tag_name().name();
         match child_name {
             "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false)?)
+                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false, false)?)
+            }
+            "protection_domain_template" => {
+                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false, true)?)
             }
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
