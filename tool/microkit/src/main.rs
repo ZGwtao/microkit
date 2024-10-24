@@ -1572,8 +1572,9 @@ fn build_system(
     let pd_endpoint_names: Vec<String> = system
         .protection_domains
         .iter()
-        .filter(|pd| pd.needs_ep())
-        .map(|pd| format!("EP: PD={}", pd.name))
+        .enumerate()
+        .filter(|(idx, pd)| pd.needs_ep(*idx, &system.channels))
+        .map(|(_, pd)| format!("EP: PD={}", pd.name))
         .collect();
     let endpoint_names = [vec![format!("EP: Monitor Fault")], pd_endpoint_names].concat();
     // Reply objects
@@ -1596,8 +1597,9 @@ fn build_system(
         system
             .protection_domains
             .iter()
-            .map(|pd| {
-                if pd.needs_ep() {
+            .enumerate()
+            .map(|(idx, pd)| {
+                if pd.needs_ep(idx, &system.channels) {
                     let obj = &endpoint_objs[1..][i];
                     i += 1;
                     Some(obj)
@@ -2162,7 +2164,7 @@ fn build_system(
 
     // Minting in the address space
     for (idx, pd) in system.protection_domains.iter().enumerate() {
-        let obj = if pd.needs_ep() {
+        let obj = if pd.needs_ep(idx, &system.channels) {
             pd_endpoint_objs[idx].unwrap()
         } else {
             &notification_objs[idx]
@@ -2349,89 +2351,55 @@ fn build_system(
     }
 
     for cc in &system.channels {
-        let pd_a = &system.protection_domains[cc.pd_a];
-        let pd_b = &system.protection_domains[cc.pd_b];
-        let pd_a_cnode_obj = cnode_objs_by_pd[pd_a];
-        let pd_b_cnode_obj = cnode_objs_by_pd[pd_b];
-        let pd_a_notification_obj = &notification_objs[cc.pd_a];
-        let pd_b_notification_obj = &notification_objs[cc.pd_b];
+        for (send, recv) in [(&cc.end_a, &cc.end_b), (&cc.end_b, &cc.end_a)] {
+            let send_pd = &system.protection_domains[send.pd];
+            let send_cnode_obj = cnode_objs_by_pd[send_pd];
+            let recv_notification_obj = &notification_objs[recv.pd];
 
-        // Set up the notification caps
-        let pd_a_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_a;
-        let pd_a_badge = 1 << cc.id_b;
-        assert!(pd_a_cap_idx < PD_CAP_SIZE);
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::CnodeMint {
-                cnode: pd_a_cnode_obj.cap_addr,
-                dest_index: pd_a_cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: pd_b_notification_obj.cap_addr,
-                src_depth: config.cap_address_bits,
-                rights: Rights::All as u64, // FIXME: Check rights
-                badge: pd_a_badge,
-            },
-        ));
+            if send.notify {
+                let send_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + send.id;
+                assert!(send_cap_idx < PD_CAP_SIZE);
+                // receiver sees the sender's badge.
+                let send_badge = 1 << recv.id;
 
-        let pd_b_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + cc.id_b;
-        let pd_b_badge = 1 << cc.id_a;
-        assert!(pd_b_cap_idx < PD_CAP_SIZE);
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::CnodeMint {
-                cnode: pd_b_cnode_obj.cap_addr,
-                dest_index: pd_b_cap_idx,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: pd_a_notification_obj.cap_addr,
-                src_depth: config.cap_address_bits,
-                rights: Rights::All as u64, // FIXME: Check rights
-                badge: pd_b_badge,
-            },
-        ));
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: send_cnode_obj.cap_addr,
+                        dest_index: send_cap_idx,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: recv_notification_obj.cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64, // FIXME: Check rights
+                        badge: send_badge,
+                    },
+                ));
+            }
 
-        // Set up the endpoint caps
-        if pd_b.pp {
-            let pd_a_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_a;
-            let pd_a_badge = PPC_BADGE | cc.id_b;
-            let pd_b_endpoint_obj = pd_endpoint_objs[cc.pd_b].unwrap();
-            assert!(pd_a_cap_idx < PD_CAP_SIZE);
+            if send.pp {
+                let send_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + send.id;
+                assert!(send_cap_idx < PD_CAP_SIZE);
+                // receiver sees the sender's badge.
+                let send_badge = PPC_BADGE | recv.id;
 
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::CnodeMint {
-                    cnode: pd_a_cnode_obj.cap_addr,
-                    dest_index: pd_a_cap_idx,
-                    dest_depth: PD_CAP_BITS,
-                    src_root: root_cnode_cap,
-                    src_obj: pd_b_endpoint_obj.cap_addr,
-                    src_depth: config.cap_address_bits,
-                    rights: Rights::All as u64, // FIXME: Check rights
-                    badge: pd_a_badge,
-                },
-            ));
-        }
+                let recv_endpoint_obj =
+                    pd_endpoint_objs[recv.pd].expect("endpoint object to exist");
 
-        if pd_a.pp {
-            let pd_b_cap_idx = BASE_OUTPUT_ENDPOINT_CAP + cc.id_b;
-            let pd_b_badge = PPC_BADGE | cc.id_a;
-            let pd_a_endpoint_obj = pd_endpoint_objs[cc.pd_a].unwrap();
-            assert!(pd_b_cap_idx < PD_CAP_SIZE);
-
-            system_invocations.push(Invocation::new(
-                config,
-                InvocationArgs::CnodeMint {
-                    cnode: pd_b_cnode_obj.cap_addr,
-                    dest_index: pd_b_cap_idx,
-                    dest_depth: PD_CAP_BITS,
-                    src_root: root_cnode_cap,
-                    src_obj: pd_a_endpoint_obj.cap_addr,
-                    src_depth: config.cap_address_bits,
-                    rights: Rights::All as u64, // FIXME: Check rights
-                    badge: pd_b_badge,
-                },
-            ));
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: send_cnode_obj.cap_addr,
+                        dest_index: send_cap_idx,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: recv_endpoint_obj.cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64, // FIXME: Check rights
+                        badge: send_badge,
+                    },
+                ));
+            }
         }
     }
 
@@ -2863,34 +2831,33 @@ fn build_system(
         system_invocation.add_raw_invocation(config, &mut system_invocation_data);
     }
 
-    let mut pd_setvar_values: Vec<Vec<u64>> = vec![vec![]; system.protection_domains.len()];
-    for (i, pd) in system.protection_domains.iter().enumerate() {
-        for setvar in &pd.setvars {
-            if setvar.symbol == "system_hash" {
-                pd_setvar_values[i].push(system_hash);
-                continue;
-            }
+    let pd_setvar_values: Vec<Vec<u64>> = system
+        .protection_domains
+        .iter()
+        .map(|pd| {
+            pd.setvars
+                .iter()
+                .map(|setvar| {
+                    if setvar.symbol == "system_hash" {
+                        system_hash
+                    } else {
+                        match &setvar.kind {
+                            sdf::SysSetVarKind::Vaddr { address } => *address,
+                            sdf::SysSetVarKind::Paddr { region } => {
+                                let mr = system
+                                    .memory_regions
+                                    .iter()
+                                    .find(|mr| mr.name == *region)
+                                    .unwrap_or_else(|| panic!("Cannot find region: {}", region));
 
-            assert!(setvar.region_paddr.is_some() || setvar.vaddr.is_some());
-            assert!(!(setvar.region_paddr.is_some() && setvar.vaddr.is_some()));
-
-            let value;
-            if let Some(region_paddr) = &setvar.region_paddr {
-                let mr = system
-                    .memory_regions
-                    .iter()
-                    .find(|mr| mr.name == *region_paddr)
-                    .unwrap_or_else(|| panic!("Cannot find region: {}", region_paddr));
-                value = mr_pages[mr][0].phys_addr;
-            } else if let Some(vaddr) = setvar.vaddr {
-                value = vaddr;
-            } else {
-                panic!("Internal error: expected setvar to either have region paddr or vaddr");
-            }
-
-            pd_setvar_values[i].push(value);
-        }
-    }
+                                mr_pages[mr][0].phys_addr
+                            }
+                        }
+                    }
+                })
+                .collect()
+        })
+        .collect();
 
     Ok(BuiltSystem {
         number_of_system_caps: final_cap_slot,
@@ -3140,6 +3107,9 @@ impl<'a> Args<'a> {
         if config.is_none() {
             missing_args.push("--config");
         }
+        if system.is_none() {
+            missing_args.push("system");
+        }
 
         if !missing_args.is_empty() {
             print_usage(available_boards);
@@ -3253,6 +3223,12 @@ fn main() -> Result<(), String> {
         .join(args.config)
         .join("include/kernel/gen_config.json");
 
+    let invocations_all_path = sdk_dir
+        .join("board")
+        .join(args.board)
+        .join(args.config)
+        .join("invocations_all.json");
+
     if !elf_path.exists() {
         eprintln!(
             "Error: board ELF directory '{}' does not exist",
@@ -3288,6 +3264,13 @@ fn main() -> Result<(), String> {
         );
         std::process::exit(1);
     }
+    if !invocations_all_path.exists() {
+        eprintln!(
+            "Error: invocations JSON file '{}' does not exist",
+            invocations_all_path.display()
+        );
+        std::process::exit(1);
+    }
 
     let system_path = Path::new(args.system);
     if !system_path.exists() {
@@ -3302,6 +3285,9 @@ fn main() -> Result<(), String> {
 
     let kernel_config_json: serde_json::Value =
         serde_json::from_str(&fs::read_to_string(kernel_config_path).unwrap()).unwrap();
+
+    let invocations_labels: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(invocations_all_path).unwrap()).unwrap();
 
     let arch = match json_str(&kernel_config_json, "SEL4_ARCH")? {
         "aarch64" => Arch::Aarch64,
@@ -3353,6 +3339,7 @@ fn main() -> Result<(), String> {
         arm_pa_size_bits,
         arm_smc,
         riscv_pt_levels: Some(RiscvVirtualMemory::Sv39),
+        invocations_labels,
     };
 
     if let Arch::Aarch64 = kernel_config.arch {

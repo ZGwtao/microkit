@@ -250,6 +250,22 @@ SUPPORTED_BOARDS = (
         }
     ),
     BoardInfo(
+        name="rockpro64",
+        arch=KernelArch.AARCH64,
+        gcc_cpu="cortex-a53",
+        loader_link_address=0x30000000,
+        kernel_options={
+            "KernelPlatform": "rockpro64",
+            "KernelIsMCS": True,
+            "KernelArmExportPCNTUser": True,
+            "KernelArmHypervisorSupport": True,
+            "KernelArmVtimerUpdateVOffset": False,
+        },
+        examples={
+            "hello": Path("example/rockpro64/hello")
+        }
+    ),
+    BoardInfo(
         name="star64",
         arch=KernelArch.RISCV64,
         gcc_cpu=None,
@@ -413,6 +429,12 @@ def build_sel4(
     dest.unlink(missing_ok=True)
     copy(elf, dest)
     # Make output read-only
+    dest.chmod(0o744)
+
+    invocations_all = sel4_build_dir / "generated" / "invocations_all.json"
+    dest = (root_dir / "board" / board.name / config.name / "invocations_all.json")
+    dest.unlink(missing_ok=True)
+    copy(invocations_all, dest)
     dest.chmod(0o744)
 
     include_dir = root_dir / "board" / board.name / config.name / "include"
