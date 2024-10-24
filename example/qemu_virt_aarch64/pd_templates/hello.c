@@ -6,11 +6,14 @@
 #include <stdint.h>
 #include <microkit.h>
 
+#define PROGNAME "hello: "
+
 void init(void)
 {
-    microkit_dbg_puts("hello, world\n");
+    microkit_dbg_puts(PROGNAME "init called\n");
 }
 
 void notified(microkit_channel ch)
 {
+    microkit_dbg_puts(PROGNAME "received notification\n");
 }
