@@ -1,5 +1,6 @@
-#include "elf_utils.h"
+#include "elf.h"
 #include <microkit.h>
+#include <stdarg.h>
 
 // Utility function to output a hexadecimal number
 void puthex(uint64_t num) {
@@ -19,7 +20,6 @@ void puthex(uint64_t num) {
             num /= 16;
         }
     }
-    microkit_dbg_puts("0x");
     microkit_dbg_puts(&buffer[i]);
 }
 
@@ -62,22 +62,6 @@ const char* get_elf_type(uint16_t type) {
     }
 }
 
-// Helper function to translate ELF machine to string
-const char* get_elf_machine(uint16_t machine) {
-    switch (machine) {
-        case EM_NONE:        return "No machine";
-        case EM_M32:         return "AT&T WE 32100";
-        case EM_SPARC:       return "Sparc";
-        case EM_386:         return "Intel 80386";
-        case EM_68K:         return "Motorola 68000";
-        case EM_88K:         return "Motorola 88000";
-        case EM_AARCH64:     return "ARM AARCH64";
-        case EM_X86_64:      return "AMD x86-64";
-        // Add more cases as needed
-        default:             return "UNKNOWN";
-    }
-}
-
 // Helper function to translate ELF data encoding to string
 const char* get_elf_data_encoding(uint8_t data) {
     switch (data) {
@@ -90,14 +74,7 @@ const char* get_elf_data_encoding(uint8_t data) {
 // Helper function to translate ELF OS/ABI to string
 const char* get_elf_osabi(uint8_t osabi) {
     switch (osabi) {
-        case ELFOSABI_SYSV:       return "UNIX - System V";
-        case ELFOSABI_HPUX:       return "UNIX - HP-UX";
-        case ELFOSABI_NETBSD:     return "UNIX - NetBSD";
         case ELFOSABI_LINUX:      return "UNIX - Linux";
-        case ELFOSABI_SOLARIS:    return "UNIX - Solaris";
-        case ELFOSABI_FREEBSD:    return "UNIX - FreeBSD";
-        case ELFOSABI_ARM_AEABI:  return "ARM EABI";
-        // Add more cases as needed
         default:                   return "Unknown";
     }
 }
@@ -151,10 +128,6 @@ void print_elf(const char* _receiver, const char* _receiver_end) {
         microkit_dbg_puts(get_elf_osabi(e_ident[EI_OSABI]));
         microkit_dbg_putc('\n');
 
-        microkit_dbg_puts("  ABI Version:                       ");
-        putdec(e_ident[EI_ABIVERSION]);
-        microkit_dbg_putc('\n');
-
         // Verify ELF version
         if (e_ident[EI_VERSION] != EV_CURRENT) {
             microkit_dbg_puts("Error: Unsupported ELF version.\n");
@@ -165,11 +138,7 @@ void print_elf(const char* _receiver, const char* _receiver_end) {
         microkit_dbg_puts(get_elf_type(ehdr32->e_type));
         microkit_dbg_putc('\n');
 
-        microkit_dbg_puts("  Machine:                           ");
-        microkit_dbg_puts(get_elf_machine(ehdr32->e_machine));
-        microkit_dbg_putc('\n');
-
-        microkit_dbg_puts("  Entry Point Address:               0x");
+        microkit_dbg_puts("  Entry Point Address:               ");
         puthex((uint64_t)(ehdr32->e_entry));
         microkit_dbg_putc('\n');
 
@@ -181,7 +150,7 @@ void print_elf(const char* _receiver, const char* _receiver_end) {
         putdec(ehdr32->e_shoff);
         microkit_dbg_puts(" (bytes into file)\n");
 
-        microkit_dbg_puts("  Flags:                             0x");
+        microkit_dbg_puts("  Flags:                             ");
         puthex((uint64_t)(ehdr32->e_flags));
         microkit_dbg_putc('\n');
 
@@ -240,10 +209,6 @@ void print_elf(const char* _receiver, const char* _receiver_end) {
         microkit_dbg_puts(get_elf_osabi(e_ident[EI_OSABI]));
         microkit_dbg_putc('\n');
 
-        microkit_dbg_puts("  ABI Version:                       ");
-        putdec(e_ident[EI_ABIVERSION]);
-        microkit_dbg_putc('\n');
-
         // Verify ELF version
         if (e_ident[EI_VERSION] != EV_CURRENT) {
             microkit_dbg_puts("Error: Unsupported ELF version.\n");
@@ -254,11 +219,7 @@ void print_elf(const char* _receiver, const char* _receiver_end) {
         microkit_dbg_puts(get_elf_type(ehdr64->e_type));
         microkit_dbg_putc('\n');
 
-        microkit_dbg_puts("  Machine:                           ");
-        microkit_dbg_puts(get_elf_machine(ehdr64->e_machine));
-        microkit_dbg_putc('\n');
-
-        microkit_dbg_puts("  Entry Point Address:               0x");
+        microkit_dbg_puts("  Entry Point Address:               ");
         puthex(ehdr64->e_entry);
         microkit_dbg_putc('\n');
 
@@ -270,7 +231,7 @@ void print_elf(const char* _receiver, const char* _receiver_end) {
         putdec(ehdr64->e_shoff);
         microkit_dbg_puts(" (bytes into file)\n");
 
-        microkit_dbg_puts("  Flags:                             0x");
+        microkit_dbg_puts("  Flags:                             ");
         puthex((uint64_t)(ehdr64->e_flags));
         microkit_dbg_putc('\n');
 
@@ -302,9 +263,6 @@ void print_elf(const char* _receiver, const char* _receiver_end) {
         microkit_dbg_puts("Error: Unknown ELF class.\n");
         return;
     }
-
-    // Basic validation passed
-    microkit_dbg_puts("ELF file is valid.\n");
 }
 
 void* custom_memcpy(void* dest, const void* src, uint64_t n) {
@@ -314,4 +272,92 @@ void* custom_memcpy(void* dest, const void* src, uint64_t n) {
         d[i] = s[i];
     }
     return dest;
+}
+
+void custom_memset(void *dest, int value, uint64_t size) {
+    unsigned char *d = (unsigned char *)dest;
+    for (uint64_t i = 0; i < size; i++) {
+        d[i] = (unsigned char)value;
+    }
+}
+
+void putvar(uint64_t var, char* name) {
+    microkit_dbg_puts(name);
+    microkit_dbg_puts(": ");
+    puthex(var);
+    microkit_dbg_putc('\n');
+}
+
+int custom_strcmp(const char *str1, const char *str2) {
+    while (*str1 && *str2) {
+        if (*str1 != *str2) {
+            return 1;
+        }
+        str1++;
+        str2++;
+    }
+
+    return *str1 != '\0' || *str2 != '\0';
+}
+
+void debug_printf(const char *format, ...) {
+    va_list args;
+    va_start(args, format);
+
+    const char *ptr = format;
+
+    while (*ptr != '\0') {
+        if (*ptr == '%') {
+            ptr++; // Move past '%'
+
+            switch (*ptr) {
+                case 's': {
+                    // String
+                    const char *str = va_arg(args, const char *);
+                    if (str != 0) {
+                        microkit_dbg_puts(str);
+                    } else {
+                        microkit_dbg_puts("(null)");
+                    }
+                    break;
+                }
+                case 'd': {
+                    // Decimal
+                    uint64_t val = va_arg(args, uint64_t);
+                    putdec(val);
+                    break;
+                }
+                case 'x': {
+                    // Hexadecimal
+                    uint64_t val = va_arg(args, uint64_t);
+                    puthex(val);
+                    break;
+                }
+                case 'c': {
+                    // Character
+                    int c = va_arg(args, int); // char is promoted to int
+                    microkit_dbg_putc((char)c);
+                    break;
+                }
+                case '%': {
+                    // Literal '%'
+                    microkit_dbg_putc('%');
+                    break;
+                }
+                default: {
+                    // Unsupported format specifier, print it literally
+                    microkit_dbg_putc('%');
+                    microkit_dbg_putc(*ptr);
+                    break;
+                }
+            }
+            ptr++; // Move past format specifier
+        } else {
+            // Regular character
+            microkit_dbg_putc(*ptr);
+            ptr++;
+        }
+    }
+
+    va_end(args);
 }

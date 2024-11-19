@@ -9,9 +9,10 @@
 
 use elf::ElfFile;
 use loader::Loader;
+use microkit_tool::sdf::Channel;
 use microkit_tool::{
     elf, loader, sdf, sel4, util, DisjointMemoryRegion, MemoryRegion, ObjectAllocator, Region,
-    UntypedObject, MAX_PDS, PD_MAX_NAME_LENGTH,
+    UntypedObject, MAX_CHANNELS, MAX_PDS, PD_MAX_NAME_LENGTH,
 };
 use sdf::{
     parse, ProtectionDomain, SysMap, SysMapPerms, SysMemoryRegion, SystemDescription,
@@ -51,6 +52,10 @@ const MONITOR_EP_CAP_IDX: u64 = 5;
 const TCB_CAP_IDX: u64 = 6;
 const SMC_CAP_IDX: u64 = 7;
 
+// These caps are only valid when the PD is a template (they refer to the child PD)
+const CHILD_CSPACE_CAP_IDX: u64 = 8;
+const CHILD_VSPACE_CAP_IDX: u64 = 9;
+
 const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
@@ -58,9 +63,15 @@ const BASE_PD_TCB_CAP: u64 = BASE_IRQ_CAP + 64;
 const BASE_VM_TCB_CAP: u64 = BASE_PD_TCB_CAP + 64;
 const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64;
 
+// These caps are only valid when the PD is a template (they refer to the child PD)
+const CHILD_BASE_OUTPUT_NOTIFICATION_CAP: u64 = BASE_VCPU_CAP + 64;
+const CHILD_BASE_IRQ_CAP: u64 = CHILD_BASE_OUTPUT_NOTIFICATION_CAP + 64;
+const CHILD_BASE_MAPPING_CAP: u64 = CHILD_BASE_IRQ_CAP + 64;
+const PD_TEMPLATE_CNODE_ROOT: u64 = CHILD_BASE_MAPPING_CAP + 64;
+
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
-const PD_CAP_SIZE: u64 = 512;
+const PD_CAP_SIZE: u64 = 1024;
 const PD_CAP_BITS: u64 = PD_CAP_SIZE.ilog2() as u64;
 const PD_SCHEDCONTEXT_SIZE: u64 = 1 << 8;
 
@@ -439,6 +450,31 @@ impl<'a> InitSystem<'a> {
     }
 }
 
+#[allow(dead_code)]
+#[repr(C)]
+#[derive(Clone, Copy)]
+pub struct OptionalMapping {
+    vaddr: u64,
+    page: u64,
+    number_of_pages: u64,
+    page_size: u64,
+    rights: u64,
+    attrs: u64,
+}
+
+impl OptionalMapping {
+    pub fn default() -> Self {
+        OptionalMapping {
+            vaddr: 0,
+            page: 0,
+            number_of_pages: 0,
+            page_size: 0,
+            rights: 0,
+            attrs: 0,
+        }
+    }
+}
+
 struct BuiltSystem {
     number_of_system_caps: u64,
     invocation_data: Vec<u8>,
@@ -455,6 +491,7 @@ struct BuiltSystem {
     ntfn_caps: Vec<u64>,
     pd_elf_regions: Vec<Vec<Region>>,
     pd_setvar_values: Vec<Vec<u64>>,
+    pd_optional_mappings: HashMap<usize, Vec<OptionalMapping>>,
     kernel_objects: Vec<Object>,
     initial_task_virt_region: MemoryRegion,
     initial_task_phys_region: MemoryRegion,
@@ -462,22 +499,79 @@ struct BuiltSystem {
 
 pub fn pd_write_symbols(
     pds: &[ProtectionDomain],
+    channels: &[Channel],
     pd_elf_files: &mut [ElfFile],
     pd_setvar_values: &[Vec<u64>],
+    pd_optional_mappings: &HashMap<usize, Vec<OptionalMapping>>,
 ) -> Result<(), String> {
-    for (i, pd) in pds.iter().enumerate() {
+    for (pd_idx, pd) in pds.iter().enumerate() {
         let Some(program_image) = &pd.program_image else {
             continue;
         };
-        
-        let elf = &mut pd_elf_files[i];
+
+        let elf = &mut pd_elf_files[pd_idx];
         let name = pd.name.as_bytes();
         let name_length = min(name.len(), PD_MAX_NAME_LENGTH);
         elf.write_symbol("microkit_name", &name[..name_length])?;
         elf.write_symbol("microkit_passive", &[pd.passive as u8])?;
 
+        if pd.is_template {
+            let mut channels_to_remove = [0u64; MAX_CHANNELS];
+            let mut irqs_to_remove = [0u64; MAX_CHANNELS];
+            let mut mappings_to_remove = [OptionalMapping::default(); MAX_CHANNELS];
+            assert!(pd_optional_mappings.len() <= MAX_CHANNELS);
+            for (mapping_idx, mapping) in pd_optional_mappings
+                .get(&pd_idx)
+                .unwrap()
+                .iter()
+                .enumerate()
+            {
+                mappings_to_remove[mapping_idx] = mapping.clone();
+                println!("Optional mapping for PD '{}' found (vaddr=0x{:x} page=0x{:x} number_of_pages={} page_size=0x{:x} rights=0x{:x} attrs=0x{:x})",
+                    pds[pd_idx].name,
+                    mapping.vaddr,
+                    mapping.page,
+                    mapping.number_of_pages,
+                    mapping.page_size,
+                    mapping.rights,
+                    mapping.attrs,
+                );
+            }
+
+            let child_idx = pds.iter().position(|pd| pd.parent == Some(pd_idx)).unwrap();
+
+            for channel in channels.iter().filter(|c| c.optional) {
+                // We already enforce that the two ends of an optional channel are both children of template PDs
+                if channel.end_a.pd == child_idx {
+                    println!(
+                        "Optional channel for PD '{}' found (id={})",
+                        pds[child_idx].name, channel.end_a.id
+                    );
+                    channels_to_remove[channel.end_a.id as usize] = 1;
+                } else if channel.end_b.pd == child_idx {
+                    println!(
+                        "Optional channel for PD '{}' found (id={})",
+                        pds[child_idx].name, channel.end_b.id
+                    );
+                    channels_to_remove[channel.end_b.id as usize] = 1;
+                }
+            }
+
+            for irq in pds[child_idx].irqs.iter().filter(|irq| irq.optional) {
+                println!(
+                    "Optional IRQ for PD '{}' found (id={} irq={})",
+                    pds[child_idx].name, irq.id, irq.irq
+                );
+                irqs_to_remove[irq.id as usize] = 1;
+            }
+
+            elf.write_symbol("channels", unsafe { struct_to_bytes(&channels_to_remove) })?;
+            elf.write_symbol("irqs", unsafe { struct_to_bytes(&irqs_to_remove) })?;
+            elf.write_symbol("mappings", unsafe { struct_to_bytes(&mappings_to_remove) })?;
+        }
+
         for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {
-            let value = pd_setvar_values[i][setvar_idx];
+            let value = pd_setvar_values[pd_idx][setvar_idx];
             let result = elf.write_symbol(&setvar.symbol, &value.to_le_bytes());
             if result.is_err() {
                 return Err(format!(
@@ -1353,6 +1447,7 @@ fn build_system(
                 perms,
                 cached: true,
                 text_pos: None,
+                optional: false,
             };
             pd_extra_maps.get_mut(pd).unwrap().push(mp);
 
@@ -1383,6 +1478,7 @@ fn build_system(
             perms: SysMapPerms::Read as u8 | SysMapPerms::Write as u8,
             cached: true,
             text_pos: None,
+            optional: false,
         };
 
         extra_mrs.push(stack_mr);
@@ -1638,7 +1734,11 @@ fn build_system(
         let mut vaddrs = vec![];
 
         if let Ok((ipc_buffer_vaddr, _)) = pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER) {
+            // println!("pd={} ipc_buffer_vaddr=0x{:x}", pd.name, ipc_buffer_vaddr);
             vaddrs.push((ipc_buffer_vaddr, PageSize::Small));
+        } else {
+            // println!("pd={} no ipc_buffer_vaddr", pd.name);
+            // vaddrs.push((0x204000, PageSize::Small));
         }
 
         let mut upper_directory_vaddrs = HashSet::new();
@@ -1844,6 +1944,14 @@ fn build_system(
     for pd in &system.protection_domains {
         irq_cap_addresses.insert(pd, vec![]);
         for sysirq in &pd.irqs {
+            let is_template_child = match pd.parent {
+                Some(parent_idx) => system.protection_domains[parent_idx].is_template,
+                None => false,
+            };
+            if sysirq.optional && !is_template_child {
+                panic!("IRQ id={} irq={} for PD '{}' is optional but the PD isn't the child of a template PD", sysirq.id, sysirq.irq, pd.name);
+            }
+
             let cap_address = system_cap_address_mask | cap_slot;
             system_invocations.push(Invocation::new(
                 config,
@@ -1886,8 +1994,11 @@ fn build_system(
     // Mint copies of required pages, while also determing what's required
     // for later mapping
     let mut pd_page_descriptors = Vec::new();
+    let mut pd_optional_mappings: HashMap<usize, Vec<OptionalMapping>> = HashMap::new();
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
-        for map_set in [&pd.maps, &pd_extra_maps[pd]] {
+        pd_optional_mappings.insert(pd_idx, vec![]);
+        let mut mapping_cap_slot = CHILD_BASE_MAPPING_CAP;
+        for (map_set, _) in [(&pd.maps, true), (&pd_extra_maps[pd], false)] {
             for mp in map_set {
                 let mr = all_mr_by_name[mp.mr.as_str()];
                 let mut rights: u64 = Rights::None as u64;
@@ -1917,57 +2028,120 @@ fn build_system(
                 assert!(!mr_pages[mr].is_empty());
                 assert!(util::objects_adjacent(&mr_pages[mr]));
 
-                let mut invocation = Invocation::new(
-                    config,
-                    InvocationArgs::CnodeMint {
-                        cnode: system_cnode_cap,
-                        dest_index: cap_slot,
-                        dest_depth: system_cnode_bits,
-                        src_root: root_cnode_cap,
-                        src_obj: mr_pages[mr][0].cap_addr,
-                        src_depth: config.cap_address_bits,
-                        rights,
-                        badge: 0,
-                    },
-                );
-                invocation.repeat(
-                    mr_pages[mr].len() as u32,
-                    InvocationArgs::CnodeMint {
-                        cnode: 0,
-                        dest_index: 1,
-                        dest_depth: 0,
-                        src_root: 0,
-                        src_obj: 1,
-                        src_depth: 0,
-                        rights: 0,
-                        badge: 0,
-                    },
-                );
-                system_invocations.push(invocation);
+                // Handle optional mappings for explicitly mapped memory regions
+                if mp.optional {
+                    let parent_idx = pd.parent.expect(&format!(
+                                        "Map for PD memory region '{}' at vaddr=0x{:x} for PD '{}' is optional but there is no parent template PD",
+                                        mp.mr, mp.vaddr, pd.name
+                                    ));
+                    let parent_pd = &system.protection_domains[parent_idx];
+                    assert!(parent_pd.is_template, "Map for memory region '{}' at vaddr=0x{:x} for PD '{}' is optional but parent PD '{}' is not a template PD", mp.mr, mp.vaddr, pd.name, parent_pd.name);
 
-                pd_page_descriptors.push((
-                    system_cap_address_mask | cap_slot,
-                    pd_idx,
-                    mp.vaddr,
-                    rights,
-                    attrs,
-                    mr_pages[mr].len() as u64,
-                    mr.page_bytes(),
-                ));
+                    pd_optional_mappings
+                        .get_mut(&parent_idx)
+                        .unwrap()
+                        .push(OptionalMapping {
+                            vaddr: mp.vaddr,
+                            page: mapping_cap_slot,
+                            number_of_pages: mr_pages[mr].len() as u64,
+                            page_size: mr.page_bytes(),
+                            rights: rights,
+                            attrs: attrs,
+                        });
 
-                for idx in 0..mr_pages[mr].len() {
-                    cap_address_names.insert(
-                        system_cap_address_mask | (cap_slot + idx as u64),
-                        format!(
-                            "{} (derived)",
-                            cap_address_names
-                                .get(&(mr_pages[mr][0].cap_addr + idx as u64))
-                                .unwrap()
-                        ),
+                    // println!(
+                    //     "Pushed optional mapping for pd='{}' mr='{}', vaddr=0x{:x} cnode={} number_of_pages={}",
+                    //     pd.name,
+                    //     mp.mr.clone(),
+                    //     mp.vaddr,
+                    //     mapping_cap_slot,
+                    //     mr_pages[mr].len()
+                    // );
+
+                    let mut invocation = Invocation::new(
+                        config,
+                        InvocationArgs::CnodeMint {
+                            cnode: cnode_objs[parent_idx].cap_addr,
+                            dest_index: mapping_cap_slot,
+                            dest_depth: PD_CAP_BITS,
+                            src_root: root_cnode_cap,
+                            src_obj: mr_pages[mr][0].cap_addr,
+                            src_depth: config.cap_address_bits,
+                            rights,
+                            badge: 0,
+                        },
                     );
-                }
+                    invocation.repeat(
+                        mr_pages[mr].len() as u32,
+                        InvocationArgs::CnodeMint {
+                            cnode: 0,
+                            dest_index: 1,
+                            dest_depth: 0,
+                            src_root: 0,
+                            src_obj: 1,
+                            src_depth: 0,
+                            rights: 0,
+                            badge: 0,
+                        },
+                    );
+                    system_invocations.push(invocation);
 
-                cap_slot += mr_pages[mr].len() as u64;
+                    // Ensure mapping_cap_slot does not exceed PD_CAP_SIZE, should be <= here because we check after incrementing it
+                    mapping_cap_slot += mr_pages[mr].len() as u64;
+                    assert!(mapping_cap_slot <= PD_CAP_SIZE);
+                } else {
+                    let mut invocation = Invocation::new(
+                        config,
+                        InvocationArgs::CnodeMint {
+                            cnode: system_cnode_cap,
+                            dest_index: cap_slot,
+                            dest_depth: system_cnode_bits,
+                            src_root: root_cnode_cap,
+                            src_obj: mr_pages[mr][0].cap_addr,
+                            src_depth: config.cap_address_bits,
+                            rights,
+                            badge: 0,
+                        },
+                    );
+                    invocation.repeat(
+                        mr_pages[mr].len() as u32,
+                        InvocationArgs::CnodeMint {
+                            cnode: 0,
+                            dest_index: 1,
+                            dest_depth: 0,
+                            src_root: 0,
+                            src_obj: 1,
+                            src_depth: 0,
+                            rights: 0,
+                            badge: 0,
+                        },
+                    );
+                    system_invocations.push(invocation);
+
+                    pd_page_descriptors.push((
+                        system_cap_address_mask | cap_slot,
+                        pd_idx,
+                        mp.vaddr,
+                        rights,
+                        attrs,
+                        mr_pages[mr].len() as u64,
+                        mr.page_bytes(),
+                    ));
+
+                    for idx in 0..mr_pages[mr].len() {
+                        cap_address_names.insert(
+                            system_cap_address_mask | (cap_slot + idx as u64),
+                            format!(
+                                "{} (derived)",
+                                cap_address_names
+                                    .get(&(mr_pages[mr][0].cap_addr + idx as u64))
+                                    .unwrap()
+                            ),
+                        );
+                    }
+
+                    cap_slot += mr_pages[mr].len() as u64;
+                }
             }
         }
     }
@@ -2266,11 +2440,32 @@ fn build_system(
                     badge: 0,
                 },
             ));
+
+            if let Some(parent_idx) = pd.parent {
+                let parent_pd = &system.protection_domains[parent_idx];
+                if parent_pd.is_template {
+                    let parent_cnode_obj = cnode_objs_by_pd[parent_pd];
+                    assert!(CHILD_BASE_IRQ_CAP + sysirq.id < PD_CAP_SIZE);
+                    system_invocations.push(Invocation::new(
+                        config,
+                        InvocationArgs::CnodeMint {
+                            cnode: parent_cnode_obj.cap_addr,
+                            dest_index: CHILD_BASE_IRQ_CAP + sysirq.id,
+                            dest_depth: PD_CAP_BITS,
+                            src_root: root_cnode_cap,
+                            src_obj: *irq_cap_address,
+                            src_depth: config.cap_address_bits,
+                            rights: Rights::All as u64,
+                            badge: 0,
+                        },
+                    ));
+                }
+            }
         }
     }
 
     // Mint access to the child TCB in the CSpace of root PDs
-    for (pd_idx, _) in system.protection_domains.iter().enumerate() {
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
             // Before doing anything, check if we are dealing with a child PD
             if let Some(parent_idx) = maybe_child_pd.parent {
@@ -2292,6 +2487,59 @@ fn build_system(
                             badge: 0,
                         },
                     ));
+                    // println!("Minted TCB cap at cnode={:x} dest_index={:x} src_root={:x} src_obj={:x}  for parent PD {} and child PD {}", cnode_objs[pd_idx].cap_addr, cap_idx, root_cnode_cap, tcb_objs[maybe_child_idx].cap_addr, pd.name, maybe_child_pd.name);
+
+                    // Mint access to the child's CSpace in the CSpace of the parent PD if the parent is a template
+                    if pd.is_template {
+                        let cspace_cap_idx = CHILD_CSPACE_CAP_IDX;
+                        assert!(cspace_cap_idx < PD_CAP_SIZE);
+                        system_invocations.push(Invocation::new(
+                            config,
+                            InvocationArgs::CnodeMint {
+                                cnode: cnode_objs[pd_idx].cap_addr,
+                                dest_index: cspace_cap_idx,
+                                dest_depth: PD_CAP_BITS,
+                                src_root: root_cnode_cap,
+                                src_obj: cnode_objs[maybe_child_idx].cap_addr,
+                                src_depth: config.cap_address_bits,
+                                rights: Rights::All as u64,
+                                badge: 0,
+                            },
+                        ));
+
+                        // Now do the VSpace as well
+                        let vspace_cap_idx = CHILD_VSPACE_CAP_IDX;
+                        assert!(vspace_cap_idx < PD_CAP_SIZE);
+                        system_invocations.push(Invocation::new(
+                            config,
+                            InvocationArgs::CnodeMint {
+                                cnode: cnode_objs[pd_idx].cap_addr,
+                                dest_index: vspace_cap_idx,
+                                dest_depth: PD_CAP_BITS,
+                                src_root: root_cnode_cap,
+                                src_obj: vspace_objs[maybe_child_idx].cap_addr,
+                                src_depth: config.cap_address_bits,
+                                rights: Rights::All as u64,
+                                badge: 0,
+                            },
+                        ));
+                        
+                        assert!(PD_TEMPLATE_CNODE_ROOT < PD_CAP_SIZE);
+                        system_invocations.push(Invocation::new(
+                            config,
+                            InvocationArgs::CnodeMint {
+                                cnode: cnode_objs[pd_idx].cap_addr,
+                                dest_index: PD_TEMPLATE_CNODE_ROOT,
+                                dest_depth: PD_CAP_BITS,
+                                src_root: root_cnode_cap,
+                                src_obj: cnode_objs[pd_idx].cap_addr,
+                                src_depth: config.cap_address_bits,
+                                rights: Rights::All as u64,
+                                badge: 0,
+                            },
+                        ));
+                        // println!("Minted CSpace cap at cnode={:x} dest_index={} dest_depth={:x} src_root={:x} src_obj={:x}  for parent PD {} id={} and child PD {} id={}", cnode_objs[pd_idx].cap_addr, cspace_cap_idx, PD_CAP_BITS, root_cnode_cap, cnode_objs[maybe_child_idx].cap_addr, pd.name, 0, maybe_child_pd.name, maybe_child_pd.id.unwrap());
+                    }
                 }
             }
         }
@@ -2358,11 +2606,13 @@ fn build_system(
             let recv_notification_obj = &notification_objs[recv.pd];
 
             if send.notify {
+                // println!("notifying");
                 let send_cap_idx = BASE_OUTPUT_NOTIFICATION_CAP + send.id;
                 assert!(send_cap_idx < PD_CAP_SIZE);
                 // receiver sees the sender's badge.
                 let send_badge = 1 << recv.id;
-
+                // println!("{:x} {:x}", cc.end_a.id, cc.end_b.id);
+                // println!("send_pd={} pushing send_cnode_obj.cap_addr={:x} send_cap_idx={:x} send_badge={:x} recv_notification_obj.cap_addr={:x} send.id={:x}", send_pd.name, send_cnode_obj.cap_addr, send_cap_idx, send_badge, recv_notification_obj.cap_addr, send.id);
                 system_invocations.push(Invocation::new(
                     config,
                     InvocationArgs::CnodeMint {
@@ -2376,6 +2626,27 @@ fn build_system(
                         badge: send_badge,
                     },
                 ));
+
+                if let Some(parent_idx) = send_pd.parent {
+                    let parent_pd = &system.protection_domains[parent_idx];
+                    if parent_pd.is_template {
+                        let parent_cnode_obj = cnode_objs_by_pd[parent_pd];
+                        assert!(CHILD_BASE_OUTPUT_NOTIFICATION_CAP + send.id < PD_CAP_SIZE);
+                        system_invocations.push(Invocation::new(
+                            config,
+                            InvocationArgs::CnodeMint {
+                                cnode: parent_cnode_obj.cap_addr,
+                                dest_index: CHILD_BASE_OUTPUT_NOTIFICATION_CAP + send.id,
+                                dest_depth: PD_CAP_BITS,
+                                src_root: root_cnode_cap,
+                                src_obj: recv_notification_obj.cap_addr,
+                                src_depth: config.cap_address_bits,
+                                rights: Rights::All as u64, // FIXME: Check rights
+                                badge: send_badge,
+                            },
+                        ));
+                    }
+                }
             }
 
             if send.pp {
@@ -2510,6 +2781,7 @@ fn build_system(
 
     // Now map all the pages
     for (page_cap_address, pd_idx, vaddr, rights, attr, count, vaddr_incr) in pd_page_descriptors {
+        // println!("Mapping page to pd {} starting at 0x{vaddr:x} with count {count} and vaddr_incr 0x{vaddr_incr:x}", system.protection_domains[pd_idx].name);
         let mut invocation = Invocation::new(
             config,
             InvocationArgs::PageMap {
@@ -2573,6 +2845,19 @@ fn build_system(
                     attr: ipc_buffer_attr,
                 },
             ));
+        } else {
+            // println!("trying to map IPC buffer for empty pd {}", system.protection_domains[pd_idx].name);
+            //     let vaddr = 0x204000;
+            // system_invocations.push(Invocation::new(
+            //     config,
+            //     InvocationArgs::PageMap {
+            //         page: ipc_buffer_objs[pd_idx].cap_addr,
+            //         vspace: pd_vspace_objs[pd_idx].cap_addr,
+            //         vaddr,
+            //         rights: Rights::Read as u64 | Rights::Write as u64,
+            //         attr: ipc_buffer_attr,
+            //     },
+            // ));
         }
     }
 
@@ -2735,28 +3020,50 @@ fn build_system(
                     buffer_frame: ipc_buffer_objs[pd_idx].cap_addr,
                 },
             ));
+        } else {
+            // println!("TcbSetIpcBuffer for empty pd {}", system.protection_domains[pd_idx].name);
+            // let ipc_buffer_vaddr = 0x204000;
+            // system_invocations.push(Invocation::new(
+            //     config,
+            //     InvocationArgs::TcbSetIpcBuffer {
+            //         tcb: tcb_objs[pd_idx].cap_addr,
+            //         buffer: ipc_buffer_vaddr,
+            //         buffer_frame: ipc_buffer_objs[pd_idx].cap_addr,
+            //     },
+            // ));
         }
     }
 
     // Set TCB registers (we only set the entry point)
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
-        if pd.program_image.is_none() {
-            continue;
-        }
-
-        let regs = match config.arch {
-            Arch::Aarch64 => Aarch64Regs {
-                pc: pd_elf_files[pd_idx].entry,
-                sp: config.pd_stack_top(),
-                ..Default::default()
+        let regs = if pd.program_image.is_none() {
+            match config.arch {
+                Arch::Aarch64 => Aarch64Regs {
+                    sp: config.pd_stack_top(),
+                    ..Default::default()
+                }
+                .field_names(),
+                Arch::Riscv64 => Riscv64Regs {
+                    sp: config.pd_stack_top(),
+                    ..Default::default()
+                }
+                .field_names(),
             }
-            .field_names(),
-            Arch::Riscv64 => Riscv64Regs {
-                pc: pd_elf_files[pd_idx].entry,
-                sp: config.pd_stack_top(),
-                ..Default::default()
+        } else {
+            match config.arch {
+                Arch::Aarch64 => Aarch64Regs {
+                    pc: pd_elf_files[pd_idx].entry,
+                    sp: config.pd_stack_top(),
+                    ..Default::default()
+                }
+                .field_names(),
+                Arch::Riscv64 => Riscv64Regs {
+                    pc: pd_elf_files[pd_idx].entry,
+                    sp: config.pd_stack_top(),
+                    ..Default::default()
+                }
+                .field_names(),
             }
-            .field_names(),
         };
 
         system_invocations.push(Invocation::new(
@@ -2884,6 +3191,7 @@ fn build_system(
         ntfn_caps: notification_caps,
         pd_elf_regions,
         pd_setvar_values,
+        pd_optional_mappings,
         kernel_objects,
         initial_task_phys_region,
         initial_task_virt_region,
@@ -2895,9 +3203,15 @@ fn write_report<W: std::io::Write>(
     config: &Config,
     built_system: &BuiltSystem,
     bootstrap_invocation_data: &[u8],
+    system_hash: &u64,
 ) -> std::io::Result<()> {
     writeln!(buf, "# Kernel Boot Info\n")?;
 
+    writeln!(
+        buf,
+        "system hash: {:#016x}",
+        system_hash
+    )?;
     writeln!(
         buf,
         "    # of fixed caps     : {:>8}",
@@ -3416,11 +3730,8 @@ fn main() -> Result<(), String> {
                 }
             }
         } else {
-            pd_elf_files.push(ElfFile::new()); // dummy elf file
-            println!(
-                "Empty PD '{}' found (no program_image supplied), adding dummy ElfFile",
-                pd.name
-            );
+            pd_elf_files.push(ElfFile::default()); // dummy elf file
+            println!("Empty PD '{}' found (no program_image supplied)", pd.name);
         }
     }
 
@@ -3608,8 +3919,10 @@ fn main() -> Result<(), String> {
     // Write out all the symbols for each PD
     pd_write_symbols(
         &system.protection_domains,
+        &system.channels,
         &mut pd_elf_files,
         &built_system.pd_setvar_values,
+        &built_system.pd_optional_mappings,
     )?;
 
     // Generate the report
@@ -3629,6 +3942,7 @@ fn main() -> Result<(), String> {
         &kernel_config,
         &built_system,
         &bootstrap_invocation_data,
+        &system_hash
     ) {
         Ok(()) => report_buf.flush().unwrap(),
         Err(err) => {

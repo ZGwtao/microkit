@@ -1,0 +1,1 @@
+- elf file has different segments with different perms but microkit sdf always has the MR has rwx perms

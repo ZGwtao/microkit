@@ -14,3 +14,5 @@ tmp_build/
 target/
 *.orig
 .DS_Store
+arm-gnu-toolchain*
+.vscode/

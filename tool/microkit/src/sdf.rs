@@ -91,6 +91,7 @@ pub struct SysMap {
     /// Location in the parsed SDF file. Because this struct is
     /// used in a non-XML context, we make the position optional.
     pub text_pos: Option<roxmltree::TextPos>,
+    pub optional: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -114,6 +115,7 @@ pub struct SysIrq {
     pub irq: u64,
     pub id: u64,
     pub trigger: IrqTrigger,
+    pub optional: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -140,6 +142,7 @@ pub struct ChannelEnd {
 pub struct Channel {
     pub end_a: ChannelEnd,
     pub end_b: ChannelEnd,
+    pub optional: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -162,6 +165,7 @@ pub struct ProtectionDomain {
     /// once we flatten each PD and its children into one list.
     pub child_pds: Vec<ProtectionDomain>,
     pub has_children: bool,
+    pub is_template: bool,
     /// Index into the total list of protection domains if a parent
     /// protection domain exists
     pub parent: Option<usize>,
@@ -207,7 +211,7 @@ impl SysMap {
         allow_setvar: bool,
         max_vaddr: u64,
     ) -> Result<SysMap, String> {
-        let mut attrs = vec!["mr", "vaddr", "perms", "cached"];
+        let mut attrs = vec!["mr", "vaddr", "perms", "cached", "optional"];
         if allow_setvar {
             attrs.push("setvar_vaddr");
         }
@@ -265,12 +269,29 @@ impl SysMap {
             true
         };
 
+        let optional = if let Some(xml_optional) = node.attribute("optional") {
+            match str_to_bool(xml_optional) {
+                Some(val) => val,
+                None => {
+                    return Err(value_error(
+                        xml_sdf,
+                        node,
+                        "optional must be 'true' or 'false'".to_string(),
+                    ))
+                }
+            }
+        } else {
+            // Default to required
+            false
+        };
+
         Ok(SysMap {
             mr,
             vaddr,
             perms,
             cached,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            optional,
         })
     }
 }
@@ -423,14 +444,6 @@ impl ProtectionDomain {
 
         let mut program_image = None;
         let mut virtual_machine = None;
-        
-        // Will also prevent users from using system_hash as a setvar name
-        if is_template {
-            setvars.push(SysSetVar {
-                symbol: "system_hash".to_string(),
-                kind: SysSetVarKind::Vaddr { address: 0 }
-            })
-        }
 
         // Default to minimum priority
         let priority = if let Some(xml_priority) = node.attribute("priority") {
@@ -445,6 +458,14 @@ impl ProtectionDomain {
                 node,
                 format!("priority must be between 0 and {}", PD_MAX_PRIORITY),
             ));
+        }
+
+        // Will also prevent users from using system_hash as a setvar name
+        if is_template {
+            setvars.push(SysSetVar {
+                symbol: "system_hash".to_string(),
+                kind: SysSetVarKind::Vaddr { address: 0 },
+            })
         }
 
         for child in node.children() {
@@ -491,7 +512,7 @@ impl ProtectionDomain {
                     maps.push(map);
                 }
                 "irq" => {
-                    check_attributes(xml_sdf, &child, &["irq", "id", "trigger"])?;
+                    check_attributes(xml_sdf, &child, &["irq", "id", "trigger", "optional"])?;
                     let irq = checked_lookup(xml_sdf, &child, "irq")?
                         .parse::<u64>()
                         .unwrap();
@@ -526,10 +547,28 @@ impl ProtectionDomain {
                         IrqTrigger::Level
                     };
 
+                    let optional = if let Some(xml_optional) = child.attribute("optional") {
+                        match str_to_bool(xml_optional) {
+                            Some(val) => val,
+                            None => {
+                                return Err(value_error(
+                                    xml_sdf,
+                                    node,
+                                    "optional must be 'true' or 'false'".to_string(),
+                                ))
+                            }
+                        }
+                    } else {
+                        // Default to required
+                        false
+                    };
+                    // println!("IRQ: {} {} optional={}", irq, id, optional);
+
                     let irq = SysIrq {
                         irq,
                         id: id as u64,
                         trigger,
+                        optional,
                     };
                     irqs.push(irq);
                 }
@@ -552,12 +591,9 @@ impl ProtectionDomain {
                         kind: SysSetVarKind::Paddr { region },
                     })
                 }
-                "protection_domain" => {
-                    child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true, false)?)
-                }
-                "protection_domain_template" => {
-                    child_pds.push(ProtectionDomain::from_xml(config, xml_sdf, &child, true, true)?)
-                }
+                "protection_domain" => child_pds.push(ProtectionDomain::from_xml(
+                    config, xml_sdf, &child, true, false,
+                )?),
                 "virtual_machine" => {
                     if virtual_machine.is_some() {
                         return Err(value_error(
@@ -583,9 +619,45 @@ impl ProtectionDomain {
         // All root PDs must have a program_image supplied
         if program_image.is_none() && !is_child {
             return Err(format!(
-                "Error: missing 'program_image' element on protection_domain: '{}'",
+                "Error: missing 'program_image' element on protection_domain: '{}'; all root PDs must have a program image",
                 name
             ));
+        }
+
+        if is_template {
+            // All template PDs must have exactly one child PD
+            if child_pds.len() != 1 {
+                return Err(format!(
+                    "Error: PD template '{}' must have exactly one child PD",
+                    name
+                ));
+            }
+
+            let child_pd = child_pds.last().unwrap();
+
+            // The trusted loader assumes that the child PD has an id of 1
+            if child_pd.id != Some(1) {
+                return Err(format!(
+                    "Error: PD template '{}' must have a child PD with id 1",
+                    name
+                ));
+            }
+        } else {
+            // // Children of non-template PDs must not have any optional IRQs or mappings
+            // for (_, child_pd) in child_pds.iter().enumerate() {
+            //     if child_pd.irqs.iter().any(|irq| irq.optional) {
+            //         return Err(format!(
+            //             "Error: PD '{}' has an optional IRQ, all IRQs must be required for children of non-template PDs",
+            //             name
+            //         ));
+            //     }
+            //     if child_pd.maps.iter().any(|map| map.optional) {
+            //         return Err(format!(
+            //             "Error: PD '{}' has an optional mapping, all mappings must be required for children of non-template PDs",
+            //             name
+            //         ));
+            //     }
+            // }
         }
 
         let has_children = !child_pds.is_empty();
@@ -608,6 +680,7 @@ impl ProtectionDomain {
             child_pds,
             virtual_machine,
             has_children,
+            is_template,
             parent: None,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
         })
@@ -865,7 +938,7 @@ impl Channel {
         node: &'a roxmltree::Node,
         pds: &[ProtectionDomain],
     ) -> Result<Channel, String> {
-        check_attributes(xml_sdf, node, &[])?;
+        check_attributes(xml_sdf, node, &["optional"])?;
 
         let [ref end_a, ref end_b] = node
             .children()
@@ -880,6 +953,47 @@ impl Channel {
             ));
         };
 
+        let optional = node
+            .attribute("optional")
+            .map(str_to_bool)
+            .unwrap_or(Some(false))
+            .ok_or_else(|| {
+                value_error(
+                    xml_sdf,
+                    node,
+                    "optional must be 'true' or 'false'".to_string(),
+                )
+            })?;
+
+        // Ensure that the PDs are children of templates if the channel is optional,
+        // as we can only remove the output notification cap if the parent PD is a template
+        // and we must remove the cap from both ends of the channel.
+        let is_optional = |end: &ChannelEnd| match pds[end.pd].parent {
+            Some(parent_idx) => pds[parent_idx].is_template,
+            None => false,
+        };
+
+        let is_end_a_optional = is_optional(end_a);
+        let is_end_b_optional = is_optional(end_b);
+
+        if optional {
+            if !is_end_a_optional || !is_end_b_optional {
+                return Err(value_error(
+                    xml_sdf,
+                    node,
+                    "optional channels must connect children of template PDs".to_string(),
+                ));
+            }
+        } else {
+            if is_end_a_optional || is_end_b_optional {
+                return Err(value_error(
+                    xml_sdf,
+                    node,
+                    "non-optional channels must not connect children of template PDs".to_string(),
+                ));
+            }
+        }
+
         if end_a.pp && end_b.pp {
             return Err(value_error(
                 xml_sdf,
@@ -891,6 +1005,7 @@ impl Channel {
         Ok(Channel {
             end_a: end_a.clone(),
             end_b: end_b.clone(),
+            optional,
         })
     }
 }
@@ -1109,12 +1224,12 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false, false)?)
-            }
-            "protection_domain_template" => {
-                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false, true)?)
-            }
+            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
+                config, &xml_sdf, &child, false, false,
+            )?),
+            "protection_domain_template" => root_pds.push(ProtectionDomain::from_xml(
+                config, &xml_sdf, &child, false, true,
+            )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
             _ => {

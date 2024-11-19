@@ -5,25 +5,34 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <memory_region name="user_program" size="0x200_000" page_size="0x200_000" />
+    <memory_region name="receiver_program" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="sender_program" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="test" size="0x800_000" page_size="0x200_000" />
 
-    <protection_domain_template name="trusted_loader" priority="254">
+    <protection_domain_template name="trusted_loader1" priority="254">
         <program_image path="trusted_loader.elf" />
-        <map mr="user_program" vaddr="0x2000000" perms="rw" cached="false" setvar_vaddr="user_program" />
+        <map mr="receiver_program" vaddr="0x400000" perms="rw" cached="true" setvar_vaddr="user_program" />
 
         <protection_domain name="receiver" id="1" priority="253">
-            <program_image path="receiver.elf" />
+            <!-- <program_image path="receiver.elf" /> -->
             <!-- remember to set execute perms for this mapping -->
-            <map mr="user_program" vaddr="0x4000000" perms="rx" cached="false" />
+            <map mr="receiver_program" vaddr="0x200000" perms="rwx" cached="true" />
+            <map mr="test" vaddr="0x4000000" perms="rw" cached="true" optional="true" />
+            <irq irq="0" id="5" optional="true" />
         </protection_domain>
     </protection_domain_template>
 
-    <channel>
+    <protection_domain_template name="trusted_loader2" priority="252">
+        <program_image path="trusted_loader.elf" />
+        <map mr="sender_program" vaddr="0x600000" perms="rw" cached="true" setvar_vaddr="user_program" />
+        <protection_domain name="sender" id="1" priority="251">
+            <!-- remember to set execute perms for this mapping -->
+            <map mr="sender_program" vaddr="0x200000" perms="rwx" cached="true" />
+        </protection_domain>
+    </protection_domain_template>
+
+    <channel optional="true">
         <end pd="sender" id="1" />
         <end pd="receiver" id="2" />
     </channel>
-
-    <protection_domain name="sender" priority="252">
-        <program_image path="sender.elf" />
-    </protection_domain>
 </system>

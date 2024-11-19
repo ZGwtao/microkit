@@ -139,7 +139,7 @@ pub struct ElfFile {
 }
 
 impl ElfFile {
-    pub fn new() -> Self {
+    pub fn default() -> Self {
         ElfFile {
             word_size: 0,
             entry: 0,
@@ -321,7 +321,7 @@ impl ElfFile {
                 Ok((sym.value, sym.size))
             }
         } else {
-            Err(format!("No symbol named '{variable_name}' not found"))
+            Err(format!("No symbol named '{variable_name}' found"))
         }
     }
 
@@ -330,7 +330,7 @@ impl ElfFile {
         for seg in &mut self.segments {
             if vaddr >= seg.virt_addr && vaddr + size <= seg.virt_addr + seg.data.len() as u64 {
                 let offset = (vaddr - seg.virt_addr) as usize;
-                assert!(data.len() as u64 <= size);
+                assert!(data.len() as u64 <= size, "size is {} but data.len() is {}", size, data.len());
                 seg.data[offset..offset + data.len()].copy_from_slice(data);
                 return Ok(());
             }

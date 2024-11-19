@@ -9,18 +9,22 @@
 
 #define PROGNAME "[receiver] "
 
-uintptr_t user_program = 0x4000000;
+uintptr_t test = 0x4000000;
 
 void init(void)
 {
-    microkit_dbg_puts(PROGNAME "Entered init\n");
-    print_elf((char*)user_program, (char*)user_program + 131824);
-    microkit_dbg_puts(PROGNAME "Fnished init\n");
+    debug_printf(PROGNAME "Entered init\n");
+
+    debug_printf(PROGNAME "Notifying channel: %d\n", 2);
+    microkit_notify(2);
+
+    debug_printf(PROGNAME "Writing to 0x%x\n", test);
+    *((uintptr_t*)test) = 0xdeadbeef;
+
+    debug_printf(PROGNAME "Finished init\n");
 }
 
 void notified(microkit_channel ch)
 {
-    microkit_dbg_puts(PROGNAME "Received notification on channel ");
-    putdec(ch);
-    microkit_dbg_puts("\n");
+    debug_printf(PROGNAME "Received notification on channel: %d\n", ch);
 }

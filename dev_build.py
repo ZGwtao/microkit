@@ -65,6 +65,10 @@ def main():
         default="debug",
         help="Config option to be passed to the tool"
     )
+    parser.add_argument(
+        "--system-hash",
+        help="System hash for patching ELF files"
+    )
     args = parser.parse_args()
 
     # TODO: Support choosing a release by specifying on command line
@@ -87,6 +91,7 @@ def main():
     make_env["MICROKIT_CONFIG"] = args.config
     make_env["MICROKIT_SDK"] = str(release)
     make_env["MICROKIT_TOOL"] = Path("tool/microkit/target/release/microkit").absolute()
+    make_env["SYSTEM_HASH"] = args.system_hash if args.system_hash else ""
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
     makefile_directory = (

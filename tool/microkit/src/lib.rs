@@ -17,6 +17,7 @@ use std::fmt;
 // Note that this value is used in the monitor so should also be changed there
 // if this was to change.
 pub const MAX_PDS: usize = 63;
+pub const MAX_CHANNELS: usize = 62;
 // It should be noted that if you were to change the value of
 // the maximum PD name length, you would also have to change
 // the monitor and libmicrokit.
