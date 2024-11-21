@@ -41,7 +41,7 @@ void putdec(uint64_t num) {
 }
 
 // Custom memcmp function since string.h is not available
-int memcmp_custom(const unsigned char* s1, const unsigned char* s2, int n) {
+int custom_memcmp(const unsigned char* s1, const unsigned char* s2, int n) {
     for (int i = 0; i < n; i++) {
         if (s1[i] != s2[i]) {
             return (s1[i] - s2[i]);
@@ -97,7 +97,7 @@ void print_elf(const char* _receiver, const char* _receiver_end) {
     }
 
     // Check ELF magic numbers
-    if (memcmp_custom((const unsigned char*)_receiver, (const unsigned char*)"\x7F""ELF", SELFMAG) != 0) {
+    if (custom_memcmp((const unsigned char*)_receiver, (const unsigned char*)"\x7F""ELF", SELFMAG) != 0) {
         microkit_dbg_puts("Error: Invalid ELF magic numbers.\n");
         return;
     }
@@ -300,7 +300,7 @@ int custom_strcmp(const char *str1, const char *str2) {
     return *str1 != '\0' || *str2 != '\0';
 }
 
-void debug_printf(const char *format, ...) {
+void microkit_dbg_printf(const char *format, ...) {
     va_list args;
     va_start(args, format);
 

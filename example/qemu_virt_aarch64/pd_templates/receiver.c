@@ -1,5 +1,5 @@
 /*
- * Copyright 2021, Breakaway Consulting Pty. Ltd.
+ * Copyright 2024, UNSW
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -13,18 +13,18 @@ uintptr_t test = 0x4000000;
 
 void init(void)
 {
-    debug_printf(PROGNAME "Entered init\n");
+    microkit_dbg_printf(PROGNAME "Entered init\n");
 
-    debug_printf(PROGNAME "Notifying channel: %d\n", 2);
+    microkit_dbg_printf(PROGNAME "Notifying channel: %d\n", 2);
     microkit_notify(2);
 
-    debug_printf(PROGNAME "Writing to 0x%x\n", test);
+    microkit_dbg_printf(PROGNAME "Writing to 0x%x\n", test);
     *((uintptr_t*)test) = 0xdeadbeef;
 
-    debug_printf(PROGNAME "Finished init\n");
+    microkit_dbg_printf(PROGNAME "Finished init\n");
 }
 
 void notified(microkit_channel ch)
 {
-    debug_printf(PROGNAME "Received notification on channel: %d\n", ch);
+    microkit_dbg_printf(PROGNAME "Received notification on channel: %d\n", ch);
 }

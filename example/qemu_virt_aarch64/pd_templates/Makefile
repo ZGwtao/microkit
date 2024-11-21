@@ -1,5 +1,5 @@
 #
-# Copyright ...
+# Copyright 2024, UNSW
 #
 # SPDX-License-Identifier: BSD-2-Clause
 #
@@ -21,9 +21,16 @@ ifeq ($(strip $(MICROKIT_CONFIG)),)
 $(error MICROKIT_CONFIG must be specified)
 endif
 
-# **New:** Ensure SYSTEM_HASH is specified
 ifeq ($(strip $(SYSTEM_HASH)),)
 $(error SYSTEM_HASH must be specified)
+endif
+
+ifeq ($(strip $(PRIVATE_KEY)),)
+$(error PRIVATE_KEY must be specified)
+endif
+
+ifeq ($(strip $(PUBLIC_KEY)),)
+$(error PUBLIC_KEY must be specified)
 endif
 
 # Toolchain and compiler settings
@@ -41,20 +48,28 @@ TRUSTED_LOADER_OBJS := trusted_loader.o
 RECEIVER_OBJS := receiver.o
 SENDER_OBJS := sender.o
 ELF_UTILS_OBJS := elf_utils.o
+CRYPTO_OBJS := fe.o ge.o key_exchange.o keypair.o sc.o sha512.o sign.o verify.o
 
 # Board directory
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 
-# **New:** Define patched ELF file names
+# Patched ELF file names
 PATCHED_RECEIVER_ELF := $(BUILD_DIR)/receiver_patched.elf
 PATCHED_SENDER_ELF := $(BUILD_DIR)/sender_patched.elf
 
-# Define IMAGES to include patched ELF files
-IMAGES := trusted_loader.elf receiver_patched.elf sender_patched.elf
+# Images to include patched ELF files
+IMAGES := $(BUILD_DIR)/trusted_loader.elf $(PATCHED_RECEIVER_ELF) $(PATCHED_SENDER_ELF)
+
+# Private key file
+PRIVATE_KEY_FILE := $(PRIVATE_KEY)
 
 # Compiler and linker flags
-CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 -Wall -Wno-unused-function -Werror -I$(BOARD_DIR)/include
+CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 \
+          -Wall -Wno-unused-function -Werror \
+          -I$(BOARD_DIR)/include
+
 LDFLAGS := -L$(BOARD_DIR)/lib
+
 LIBS := -lmicrokit -Tmicrokit.ld
 
 # Output files
@@ -72,38 +87,43 @@ $(BUILD_DIR)/%.o: %.c Makefile
 $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g -mcpu=$(CPU) $< -o $@
 
-# **New:** Rule to generate receiver_patched.elf
+# Generate patched ELF files
 $(PATCHED_RECEIVER_ELF): $(BUILD_DIR)/receiver.elf
-	python patch_elf.py $< $(SYSTEM_HASH)
+	python patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
-# **New:** Rule to generate sender_patched.elf
 $(PATCHED_SENDER_ELF): $(BUILD_DIR)/sender.elf
-	python patch_elf.py $< $(SYSTEM_HASH)
+	python patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
-# Link trusted_loader.elf using patched ELF files
-$(BUILD_DIR)/trusted_loader.elf: $(addprefix $(BUILD_DIR)/, $(TRUSTED_LOADER_OBJS)) $(addprefix $(BUILD_DIR)/, $(ELF_UTILS_OBJS)) programs.o
+# Link trusted_loader.elf
+$(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \
+                                 $(BUILD_DIR)/$(ELF_UTILS_OBJS) \
+								 $(BUILD_DIR)/${CRYPTO_OBJS} \
+                                 programs.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-# **Updated:** programs.o now depends on patched ELF files
+# Link programs.o with patched ELF dependencies
 programs.o: package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_SENDER_ELF) elf_utils.h
 	$(CC) -c -g3 -x assembler-with-cpp \
 		-DRECEIVER_PATH=\"$(PATCHED_RECEIVER_ELF)\" \
 		-DSENDER_PATH=\"$(PATCHED_SENDER_ELF)\" \
 		package_programs.S -o $@
 
-# Link receiver.elf as before
-$(BUILD_DIR)/receiver.elf: $(addprefix $(BUILD_DIR)/, $(RECEIVER_OBJS)) $(addprefix $(BUILD_DIR)/, $(ELF_UTILS_OBJS))
+# Link receiver.elf
+$(BUILD_DIR)/receiver.elf: $(BUILD_DIR)/$(RECEIVER_OBJS) \
+                            $(BUILD_DIR)/$(ELF_UTILS_OBJS)
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-# Link sender.elf as before
-$(BUILD_DIR)/sender.elf: $(addprefix $(BUILD_DIR)/, $(SENDER_OBJS)) $(addprefix $(BUILD_DIR)/, $(ELF_UTILS_OBJS))
+# Link sender.elf
+$(BUILD_DIR)/sender.elf: $(BUILD_DIR)/$(SENDER_OBJS) \
+                          $(BUILD_DIR)/$(ELF_UTILS_OBJS)
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-# Generate the final image and report using patched ELF files
-$(IMAGE_FILE) $(REPORT_FILE): $(addprefix $(BUILD_DIR)/, $(IMAGES)) pd_templates.system
-	$(MICROKIT_TOOL) pd_templates.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(IMAGE_FILE) -r $(REPORT_FILE)
+# Generate final image and report
+$(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) pd_templates.system
+	$(MICROKIT_TOOL) pd_templates.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) \
+		-o $(IMAGE_FILE) -r $(REPORT_FILE) -p $(PUBLIC_KEY)
 
-# Optional: Clean target to remove build artifacts
+# Clean target
 clean:
 	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.elf $(IMAGE_FILE) $(REPORT_FILE)
 

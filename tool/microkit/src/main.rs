@@ -40,6 +40,8 @@ use util::{
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
 
+const ED25519_PUBLIC_KEY_BYTES: usize = 32;
+
 const FAULT_BADGE: u64 = 1 << 62;
 const PPC_BADGE: u64 = 1 << 63;
 
@@ -503,6 +505,7 @@ pub fn pd_write_symbols(
     pd_elf_files: &mut [ElfFile],
     pd_setvar_values: &[Vec<u64>],
     pd_optional_mappings: &HashMap<usize, Vec<OptionalMapping>>,
+    public_key: Option<&[u8]>,
 ) -> Result<(), String> {
     for (pd_idx, pd) in pds.iter().enumerate() {
         let Some(program_image) = &pd.program_image else {
@@ -520,6 +523,9 @@ pub fn pd_write_symbols(
             let mut irqs_to_remove = [0u64; MAX_CHANNELS];
             let mut mappings_to_remove = [OptionalMapping::default(); MAX_CHANNELS];
             assert!(pd_optional_mappings.len() <= MAX_CHANNELS);
+
+            let child_idx = pds.iter().position(|pd| pd.parent == Some(pd_idx)).unwrap();
+
             for (mapping_idx, mapping) in pd_optional_mappings
                 .get(&pd_idx)
                 .unwrap()
@@ -528,7 +534,7 @@ pub fn pd_write_symbols(
             {
                 mappings_to_remove[mapping_idx] = mapping.clone();
                 println!("Optional mapping for PD '{}' found (vaddr=0x{:x} page=0x{:x} number_of_pages={} page_size=0x{:x} rights=0x{:x} attrs=0x{:x})",
-                    pds[pd_idx].name,
+                    pds[child_idx].name,
                     mapping.vaddr,
                     mapping.page,
                     mapping.number_of_pages,
@@ -537,8 +543,6 @@ pub fn pd_write_symbols(
                     mapping.attrs,
                 );
             }
-
-            let child_idx = pds.iter().position(|pd| pd.parent == Some(pd_idx)).unwrap();
 
             for channel in channels.iter().filter(|c| c.optional) {
                 // We already enforce that the two ends of an optional channel are both children of template PDs
@@ -568,6 +572,12 @@ pub fn pd_write_symbols(
             elf.write_symbol("channels", unsafe { struct_to_bytes(&channels_to_remove) })?;
             elf.write_symbol("irqs", unsafe { struct_to_bytes(&irqs_to_remove) })?;
             elf.write_symbol("mappings", unsafe { struct_to_bytes(&mappings_to_remove) })?;
+
+            if let Some(pk) = public_key {
+                elf.write_symbol("public_key", pk)?;
+                let pk_hex = pk.iter().map(|byte| format!("{:02x}", byte)).collect::<String>();
+                println!("Public key written to PD '{}' (length {} bytes): 0x{}", pd.name, pk.len(), pk_hex);
+            }
         }
 
         for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {
@@ -3316,6 +3326,7 @@ fn print_help(available_boards: &[String]) {
     println!("  -h, --help, show this help message and exit");
     println!("  -o, --output OUTPUT");
     println!("  -r, --report REPORT");
+    println!("  -p, --pubkey PUBKEY\tSpecify the Ed25519 public key file to patch into ELF files");
     println!("  --board {{{}}}", available_boards.join(","));
     println!("  --config CONFIG");
     println!("  --search-path [SEARCH_PATH ...]");
@@ -3327,6 +3338,7 @@ struct Args<'a> {
     config: &'a str,
     report: &'a str,
     output: &'a str,
+    pubkey: Option<&'a String>,
     search_paths: Vec<&'a String>,
 }
 
@@ -3335,6 +3347,7 @@ impl<'a> Args<'a> {
         // Default arguments
         let mut output = "loader.img";
         let mut report = "report.txt";
+        let mut pubkey = None;
         let mut search_paths = Vec::new();
         // Arguments expected to be provided by the user
         let mut system = None;
@@ -3372,6 +3385,16 @@ impl<'a> Args<'a> {
                         i += 1;
                     } else {
                         eprintln!("microkit: error: argument -r/--report: expected one argument");
+                        std::process::exit(1);
+                    }
+                }
+                "-p" | "--pubkey" => {
+                    in_search_path = false;
+                    if i < args.len() - 1 {
+                        pubkey = Some(&args[i + 1]);
+                        i += 1;
+                    } else {
+                        eprintln!("microkit: error: argument -p/--pubkey: expected one argument");
                         std::process::exit(1);
                     }
                 }
@@ -3449,6 +3472,7 @@ impl<'a> Args<'a> {
             config: config.unwrap(),
             report,
             output,
+            pubkey,
             search_paths,
         }
     }
@@ -3499,6 +3523,28 @@ fn main() -> Result<(), String> {
 
     let env_args: Vec<_> = std::env::args().collect();
     let args = Args::parse(&env_args, &available_boards);
+
+    // Read the public key if provided
+    let public_key_bytes: Option<Vec<u8>> = if let Some(pubkey_path) = args.pubkey {
+        let path = Path::new(pubkey_path);
+        if !path.exists() {
+            return Err(format!("Public key file '{}' does not exist.", pubkey_path));
+        }
+
+        let key_data = fs::read(path).map_err(|e| format!("Failed to read public key file '{}': {}", pubkey_path, e))?;
+
+        if key_data.len() != ED25519_PUBLIC_KEY_BYTES {
+            return Err(format!(
+                "Invalid public key size: expected {} bytes, found {} bytes.",
+                ED25519_PUBLIC_KEY_BYTES,
+                key_data.len()
+            ));
+        }
+
+        Some(key_data)
+    } else {
+        None
+    };
 
     let board_path = boards_path.join(args.board);
     if !board_path.exists() {
@@ -3923,6 +3969,7 @@ fn main() -> Result<(), String> {
         &mut pd_elf_files,
         &built_system.pd_setvar_values,
         &built_system.pd_optional_mappings,
+        public_key_bytes.as_deref(),
     )?;
 
     // Generate the report

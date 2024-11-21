@@ -67,7 +67,15 @@ def main():
     )
     parser.add_argument(
         "--system-hash",
-        help="System hash for patching ELF files"
+        help="System hash for patching ELF files with access rights"
+    )
+    parser.add_argument(
+        "--private-key",
+        help="Private key to achieve tamperproofing of access rights"
+    )
+    parser.add_argument(
+        "--public-key",
+        help="Public key to achieve tamperproofing of access rights"
     )
     args = parser.parse_args()
 
@@ -92,6 +100,8 @@ def main():
     make_env["MICROKIT_SDK"] = str(release)
     make_env["MICROKIT_TOOL"] = Path("tool/microkit/target/release/microkit").absolute()
     make_env["SYSTEM_HASH"] = args.system_hash if args.system_hash else ""
+    make_env["PRIVATE_KEY"] = args.private_key if args.private_key else ""
+    make_env["PUBLIC_KEY"] = args.public_key if args.public_key else ""
 
     # Choose the makefile based on the `--example-from-sdk` command line flag
     makefile_directory = (
