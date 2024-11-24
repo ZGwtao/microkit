@@ -10,7 +10,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdarg.h>
-#include <string.h>
 
 #include <microkit.h>
 
@@ -37,9 +36,9 @@
 #define MAX_MAPPINGS                        MICROKIT_MAX_CHANNELS
 
 // Maximum size calculations
-#define SYSTEM_HASH_SIZE          sizeof(seL4_Word)
-#define NUM_ENTRIES_SIZE          sizeof(uint32_t)
-#define ACCESS_RIGHT_ENTRY_SIZE   9 // 1 byte for type + 8 bytes for data
+#define SYSTEM_HASH_SIZE                    sizeof(seL4_Word)
+#define NUM_ENTRIES_SIZE                    sizeof(uint32_t)
+#define ACCESS_RIGHT_ENTRY_SIZE             9 // 1 byte for type + 8 bytes for data
 
 // Access types
 typedef enum {
@@ -57,7 +56,7 @@ typedef struct {
 // Structure to hold all access rights
 typedef struct {
     seL4_Word system_hash;
-    seL4_Word num_entries;
+    uint32_t num_entries;
     AccessRightEntry entries[MAX_ACCESS_RIGHTS];
 } AccessRights;
 
@@ -71,33 +70,30 @@ typedef struct {
     seL4_Word attrs;
 } MemoryMapping;
 
-// External ELF binaries
-extern char _receiver[];
-extern char _receiver_end[];
-extern char _sender[];
-extern char _sender_end[];
-
 // Public key for verifying signatures (256-bit for Ed25519)
 // Initialize with zeros; should be patched externally with the actual public key
-unsigned char public_key[ED25519_PUBLIC_KEY_BYTES] = {0};
+unsigned char public_key[ED25519_PUBLIC_KEY_BYTES];
 
 // Global variables (patched externally)
-seL4_Word channels[MICROKIT_MAX_CHANNELS] = {0};
-seL4_Word irqs[MICROKIT_MAX_CHANNELS] = {0};
-MemoryMapping mappings[MAX_MAPPINGS] = {0};
-uintptr_t user_program = 0;
-seL4_Word system_hash = 0;
+seL4_Word channels[MICROKIT_MAX_CHANNELS];
+seL4_Word irqs[MICROKIT_MAX_CHANNELS];
+MemoryMapping mappings[MAX_MAPPINGS];
+uintptr_t user_program;
+uintptr_t shared;
+seL4_Word system_hash;
 
 // Global variables
+static AccessRights access_rights = {0};
 static bool allowed_channels[MICROKIT_MAX_CHANNELS] = {false};
 static bool allowed_irqs[MICROKIT_MAX_CHANNELS] = {false};
 static MemoryMapping allowed_mappings[MAX_MAPPINGS] = {0};
 static int num_allowed_mappings = 0;
+static bool removed_caps = false;
 
 // Function prototypes
-static bool populate_rights(AccessRights *rights, const unsigned char *verified_data, size_t verified_data_len);
-static void populate_allowed(const AccessRights *rights);
-static void load_elf(const Elf64_Ehdr *ehdr);
+static seL4_Error populate_rights(AccessRights *rights, const unsigned char *verified_data, size_t verified_data_len);
+static seL4_Error populate_allowed(const AccessRights *rights);
+static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr);
 static MemoryMapping* find_mapping_by_vaddr(seL4_Word vaddr);
 static void remove_caps();
 static void restore_caps();
@@ -105,89 +101,8 @@ static void restore_caps();
 void init(void)
 {
     microkit_dbg_printf(PROGNAME "Entered init\n");
-    microkit_dbg_printf(PROGNAME "System hash (from trusted loader): 0x%x\n", (unsigned long long)system_hash);
-
-    char *elf_start = NULL;
-    char *elf_end = NULL;
-
-    // Determine which ELF to load based on name
-    if (custom_strcmp(microkit_name, "trusted_loader1") == 0) {
-        elf_start = _receiver;
-        elf_end = _receiver_end;
-        microkit_dbg_printf(PROGNAME "Loading receiver program\n");
-    } else if (custom_strcmp(microkit_name, "trusted_loader2") == 0) {
-        elf_start = _sender;
-        elf_end = _sender_end;
-        microkit_dbg_printf(PROGNAME "Loading sender program\n");
-    } else {
-        microkit_dbg_printf(PROGNAME "Unknown program name: %s\n", microkit_name);
-        return;
-    }
-
-    seL4_Word elf_size = (seL4_Word)(elf_end - elf_start);
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)elf_start;
-
-    if (elf_size < sizeof(Elf64_Ehdr)) {
-        microkit_dbg_printf(PROGNAME "Invalid ELF size\n");
-        return;
-    }
-
-    if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
-        microkit_dbg_printf(PROGNAME "Invalid ELF magic\n");
-        return;
-    }
-
-    microkit_dbg_printf(PROGNAME "Verified ELF header\n");
-
-    // Locate the .access_rights section
-    Elf64_Shdr *shdr = (Elf64_Shdr *)((char*)ehdr + ehdr->e_shoff);
-    const char *shstrtab = (char*)ehdr + shdr[ehdr->e_shstrndx].sh_offset;
-
-    unsigned char *access_rights_section = NULL;
-    seL4_Word access_rights_size = 0;
-
-    for (int i = 0; i < ehdr->e_shnum; i++) {
-        const char *section_name = shstrtab + shdr[i].sh_name;
-        if (custom_strcmp(section_name, ".access_rights") == 0) {
-            access_rights_section = (unsigned char*)ehdr + shdr[i].sh_offset;
-            access_rights_size = shdr[i].sh_size;
-            break;
-        }
-    }
-
-    if (access_rights_section == NULL) {
-        microkit_dbg_printf(PROGNAME ".access_rights section not found in ELF\n");
-        return;
-    }
-
-    // Verify the signature (only the relevant part of the section)
-    AccessRights access_rights;
-    bool success = populate_rights(
-        &access_rights,                         // Pointer to AccessRights structure
-        access_rights_section,                  // Pointer to signature || data
-        access_rights_size                      // Length of signed message
-    );
-
-    if (!success) {
-        return;
-    }
-
-    populate_allowed(&access_rights);
-    remove_caps();
-
-    load_elf(ehdr);
-    microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
-
-    // Restart the child PD at the entry point
-    microkit_pd_restart(CHILD_ID, ehdr->e_entry);
-    microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
+    microkit_dbg_printf(PROGNAME "System hash: 0x%x\n", (unsigned long long)system_hash);
     microkit_dbg_printf(PROGNAME "Finished init\n");
-}
-
-void reset(void)
-{
-    microkit_dbg_printf(PROGNAME "Entered reset\n");
-    microkit_dbg_printf(PROGNAME "Finished reset\n");
 }
 
 void notified(microkit_channel ch)
@@ -198,7 +113,69 @@ void notified(microkit_channel ch)
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     microkit_dbg_printf(PROGNAME "Received protected message on channel: %d\n", ch);
-    return microkit_msginfo_new(0, 0);
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared;
+
+    if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
+        microkit_dbg_printf(PROGNAME "Data in shared memory region must be an ELF file\n");
+        return microkit_msginfo_new(seL4_InvalidArgument, 0);
+    }
+
+    microkit_dbg_printf(PROGNAME "Verified ELF header\n");
+
+    // Locate the .access_rights section
+    Elf64_Shdr *shdr = (Elf64_Shdr *)((char*)ehdr + ehdr->e_shoff);
+    const char *shstrtab = (char*)ehdr + shdr[ehdr->e_shstrndx].sh_offset;
+
+    char *section = NULL;
+    seL4_Word section_size = 0;
+
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        const char *section_name = shstrtab + shdr[i].sh_name;
+        if (custom_strcmp(section_name, ".access_rights") == 0) {
+            section = (char*)ehdr + shdr[i].sh_offset;
+            section_size = shdr[i].sh_size;
+            break;
+        }
+    }
+
+    if (section == NULL) {
+        microkit_dbg_printf(PROGNAME ".access_rights section not found in ELF\n");
+        return microkit_msginfo_new(seL4_InvalidArgument, 0);
+    }
+
+    seL4_Error error;
+
+    // Verify the signature (only the relevant part of the section)
+    error = populate_rights(
+        &access_rights,                   // Pointer to AccessRights structure
+        (unsigned char*)section,          // Pointer to signature || data
+        section_size                      // Length of signed message
+    );
+    if (error != seL4_NoError) {
+        return microkit_msginfo_new(error, 0);
+    }
+
+    // Restore deleted caps if a program has previously been loaded
+    // Must be done before allowed lists are populated
+    if (removed_caps) {
+        restore_caps();
+    }
+
+    error = populate_allowed(&access_rights);
+    if (error != seL4_NoError) {
+        return microkit_msginfo_new(error, 0);
+    }
+
+    remove_caps();
+    removed_caps = true;
+
+    load_elf((void*)user_program, ehdr);
+    microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
+
+    // Restart the child PD at the entry point
+    microkit_pd_restart(CHILD_ID, ehdr->e_entry);
+    microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
+    return microkit_msginfo_new(seL4_NoError, 0);
 }
 
 seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)
@@ -211,13 +188,14 @@ seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo
     if (label == seL4_Fault_VMFault) {
         seL4_Word ip = microkit_mr_get(seL4_VMFault_IP);
         seL4_Word address = microkit_mr_get(seL4_VMFault_Addr);
+        microkit_dbg_printf(PROGNAME "seL4_Fault_VMFault\n");
         microkit_dbg_printf(PROGNAME "Fault address: 0x%x\n", (unsigned long long)address);
         microkit_dbg_printf(PROGNAME "Fault instruction pointer: 0x%x\n", (unsigned long long)ip);
     }
 
     microkit_pd_stop(child);
 
-    // Restart the thread explicitly; no need to reply to the fault
+    // Stop the thread explicitly; no need to reply to the fault
     return seL4_False;
 }
 
@@ -229,15 +207,17 @@ seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo
  * @param signed_message_len Length of the signed message in bytes.
  * @return true if the signature is valid, false otherwise.
  */
-static bool populate_rights(AccessRights* rights, const unsigned char *signed_message, size_t signed_message_len)
+static seL4_Error populate_rights(AccessRights* rights, const unsigned char *signed_message, size_t signed_message_len)
 {
+    custom_memset(&access_rights, 0, sizeof(AccessRights));
+
     // Calculate the minimum required size: signature + system_hash + num_access_rights
     size_t min_required_size = ED25519_SIGNATURE_BYTES + SYSTEM_HASH_SIZE + NUM_ENTRIES_SIZE;
     
     if (signed_message_len < min_required_size) {
         microkit_dbg_printf(PROGNAME "Signed message length (%d) is too short. Minimum required: %d bytes.\n",
                            signed_message_len, min_required_size);
-        return false;
+        return seL4_InvalidArgument;
     }
 
     // Extract signature and data
@@ -245,8 +225,8 @@ static bool populate_rights(AccessRights* rights, const unsigned char *signed_me
     const unsigned char *data = signed_message + ED25519_SIGNATURE_BYTES;
 
     // Parse system_hash and num_entries from the verified data
-    rights->system_hash = *((seL4_Word*)(data));
-    rights->num_entries = *((uint32_t*)(data + SYSTEM_HASH_SIZE));
+    custom_memcpy(&rights->system_hash, data, SYSTEM_HASH_SIZE);
+    custom_memcpy(&rights->num_entries, data + SYSTEM_HASH_SIZE, NUM_ENTRIES_SIZE);
 
     microkit_dbg_printf(PROGNAME "System hash (from access rights section of ELF file): 0x%x\n", rights->system_hash);
     microkit_dbg_printf(PROGNAME "Number of access rights: %d\n", rights->num_entries);
@@ -254,15 +234,15 @@ static bool populate_rights(AccessRights* rights, const unsigned char *signed_me
     // Check if the number of access rights exceeds the maximum allowed
     if (rights->num_entries > MAX_ACCESS_RIGHTS) {
         microkit_dbg_printf(PROGNAME "Number of access rights (%d) exceeds maximum allowed (%d)\n", rights->num_entries, MAX_ACCESS_RIGHTS);
-        return false;
+        return seL4_InvalidArgument;
     }
 
     // Verify system_hash matches
     if (rights->system_hash != system_hash) {
-        microkit_dbg_printf(PROGNAME "System hash mismatch: expected 0x%lx, found 0x%lx\n",
+        microkit_dbg_printf(PROGNAME "System hash mismatch: expected 0x%x, found 0x%x\n",
                            (unsigned long)system_hash,
                            (unsigned long)rights->system_hash);
-        return false;
+        return seL4_InvalidArgument;
     }
 
     microkit_dbg_printf(PROGNAME "Extracted system hash and trusted loader's system hash matched successfully\n");
@@ -272,7 +252,7 @@ static bool populate_rights(AccessRights* rights, const unsigned char *signed_me
     
     if (signed_message_len < ED25519_SIGNATURE_BYTES + data_size) {
         microkit_dbg_printf(PROGNAME "Verified data size (%d) is less than expected size (%d)\n", signed_message_len, ED25519_SIGNATURE_BYTES + data_size);
-        return false;
+        return seL4_InvalidArgument;
     }
 
     // Print the public key in hex
@@ -301,7 +281,7 @@ static bool populate_rights(AccessRights* rights, const unsigned char *signed_me
 
     if (valid_signature != 1) {
         microkit_dbg_printf(PROGNAME "ed25519_verify failed. Invalid signature.\n");
-        return false;
+        return seL4_InvalidArgument;
     }
 
     microkit_dbg_printf(PROGNAME "ed25519_verify succeeded. Signature is valid.\n");
@@ -310,15 +290,13 @@ static bool populate_rights(AccessRights* rights, const unsigned char *signed_me
 
     // Parse each access right entry
     for (uint32_t i = 0; i < rights->num_entries; i++) {
-        AccessRightEntry *entry = &rights->entries[rights->num_entries];
+        AccessRightEntry *entry = &rights->entries[i];
         entry->type = (AccessType)*(access_rights_table + i * ACCESS_RIGHT_ENTRY_SIZE);
         entry->data = *((seL4_Word*)(access_rights_table + i * ACCESS_RIGHT_ENTRY_SIZE + sizeof(uint8_t)));
-        rights->num_entries++;
-        microkit_dbg_printf(PROGNAME "Parsed access right %d: type=%d, data=0x%x\n", i + 1, entry->type, (unsigned long long)entry->data);
+        microkit_dbg_printf(PROGNAME "Parsed access right %d: type=%d, data=0x%x\n", i, entry->type, (unsigned long long)entry->data);
     }
 
-    microkit_dbg_printf(PROGNAME "Total number of access rights parsed: %d\n", rights->num_entries);
-    return true;
+    return seL4_NoError;
 }
 
 /**
@@ -326,7 +304,7 @@ static bool populate_rights(AccessRights* rights, const unsigned char *signed_me
  *
  * @param ehdr Pointer to ELF header.
  */
-static void load_elf(const Elf64_Ehdr *ehdr)
+static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
 {
     Elf64_Phdr *phdr = (Elf64_Phdr *)((char*)ehdr + ehdr->e_phoff);
 
@@ -336,7 +314,7 @@ static void load_elf(const Elf64_Ehdr *ehdr)
         }
 
         void *src = (char*)ehdr + phdr[i].p_offset;
-        void *dest = (void *)(user_program + phdr[i].p_vaddr - 0x200000); // Adjust as per your memory mapping
+        void *dest = (void *)(dest_vaddr + phdr[i].p_vaddr - ehdr->e_entry);
 
         custom_memcpy(dest, src, phdr[i].p_filesz);
 
@@ -357,7 +335,7 @@ static void load_elf(const Elf64_Ehdr *ehdr)
  */
 static MemoryMapping* find_mapping_by_vaddr(seL4_Word vaddr)
 {
-    for (int i = 0; i < MICROKIT_MAX_CHANNELS; i++) {
+    for (seL4_Word i = 0; i < MICROKIT_MAX_CHANNELS; i++) {
         if (mappings[i].vaddr == vaddr) {
             return &mappings[i];
         }
@@ -370,14 +348,14 @@ static MemoryMapping* find_mapping_by_vaddr(seL4_Word vaddr)
  *
  * @param rights Pointer to AccessRights structure.
  */
-static void populate_allowed(const AccessRights *rights)
+static seL4_Error populate_allowed(const AccessRights *rights)
 {
     // Reset allowed lists
     custom_memset(allowed_channels, 0, sizeof(allowed_channels));
     custom_memset(allowed_irqs, 0, sizeof(allowed_irqs));
     num_allowed_mappings = 0;
 
-    for (seL4_Word i = 0; i < rights->num_entries; i++) {
+    for (uint32_t i = 0; i < rights->num_entries; i++) {
         const AccessRightEntry *entry = &rights->entries[i];
         switch (entry->type) {
             case ACCESS_TYPE_CHANNEL:
@@ -386,6 +364,7 @@ static void populate_allowed(const AccessRights *rights)
                     microkit_dbg_printf(PROGNAME "Allowed channel ID: %d\n", (unsigned long long)entry->data);
                 } else {
                     microkit_dbg_printf(PROGNAME "Invalid channel ID: %d\n", (unsigned long long)entry->data);
+                    return seL4_InvalidArgument;
                 }
                 break;
 
@@ -395,6 +374,7 @@ static void populate_allowed(const AccessRights *rights)
                     microkit_dbg_printf(PROGNAME "Allowed IRQ ID: %d\n", (unsigned long long)entry->data);
                 } else {
                     microkit_dbg_printf(PROGNAME "Invalid IRQ ID: %d\n", (unsigned long long)entry->data);
+                    return seL4_InvalidArgument;
                 }
                 break;
 
@@ -402,21 +382,26 @@ static void populate_allowed(const AccessRights *rights)
                 if (num_allowed_mappings < MAX_MAPPINGS) {
                     seL4_Word vaddr = entry->data;
                     MemoryMapping *mapping = find_mapping_by_vaddr(vaddr);
-                    if (mapping) {
+                    if (mapping != NULL) {
                         allowed_mappings[num_allowed_mappings++] = *mapping;
                         microkit_dbg_printf(PROGNAME "Allowed memory vaddr: 0x%x\n", (unsigned long long)vaddr);
                     } else {
                         microkit_dbg_printf(PROGNAME "Mapping not found for vaddr: 0x%x\n", (unsigned long long)vaddr);
+                        return seL4_InvalidArgument;
                     }
                 } else {
                     microkit_dbg_printf(PROGNAME "Number of allowed mappings exceeded\n");
+                    return seL4_InvalidArgument;
                 }
                 break;
 
             default:
                 microkit_dbg_printf(PROGNAME "Unknown access type: %d\n", (unsigned int)entry->type);
+                return seL4_InvalidArgument;
         }
     }
+
+    return seL4_NoError;
 }
 
 static void remove_caps()
@@ -438,7 +423,7 @@ static void remove_caps()
             microkit_internal_crash(error);
         }
 
-        microkit_dbg_printf(PROGNAME "Restored channel cap: channel_id=%d\n", channel_id);   
+        microkit_dbg_printf(PROGNAME "Deleted channel cap: channel_id=%d\n", channel_id);   
     }
 
     // Delete disallowed IRQ capabilities

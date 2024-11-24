@@ -35,3 +35,11 @@ _sender:
 .incbin SENDER_PATH
 _sender_end:
 #endif
+
+#if defined(RECEIVER2_PATH)
+.section .receiver2, "aw", @progbits
+.global _receiver2, _receiver2_end
+_receiver2:
+.incbin RECEIVER2_PATH
+_receiver2_end:
+#endif

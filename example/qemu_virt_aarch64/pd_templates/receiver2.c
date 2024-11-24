@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <microkit.h>
 
-#define PROGNAME "[receiver] "
+#define PROGNAME "[receiver2] "
 
 static uintptr_t test = 0x4000000;
 
