@@ -157,4 +157,4 @@ qemu: $(IMAGE_FILE)
 clean:
 	rm -f $(BUILD_DIR)/*.o $(BUILD_DIR)/*.elf $(IMAGE_FILE) $(REPORT_FILE)
 
-.PHONY: all clean
+.PHONY: all clean qemu
