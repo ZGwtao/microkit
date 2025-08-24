@@ -43,7 +43,9 @@ AS := $(TOOLCHAIN)-as
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 PYTHON	:= $(PWD)/pyenv/bin/python
-CRYPTO_PATH := crypto/
+
+LIBCRYPTO_SRC_DIR := $(CURDIR)/crypto
+include crypto/Makefile
 
 # Object files
 TRUSTED_LOADER_OBJS := trusted_loader.o
@@ -51,7 +53,7 @@ RECEIVER_OBJS := receiver.o
 RECEIVER2_OBJS := receiver2.o
 SENDER_OBJS := sender.o
 ELF_UTILS_OBJS := elf_utils.o
-CRYPTO_OBJS := fe.o ge.o key_exchange.o keypair.o sc.o sha512.o sign.o verify.o
+# CRYPTO_OBJS := fe.o ge.o key_exchange.o keypair.o sc.o sha512.o sign.o verify.o
 RECEIVER_LOADER_OBJS := receiver_loader.o
 SENDER_LOADER_OBJS := sender_loader.o
 
@@ -74,7 +76,7 @@ CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 \
           -Wall -Wno-unused-function -Werror \
           -I$(BOARD_DIR)/include
 
-LDFLAGS := -L$(BOARD_DIR)/lib
+LDFLAGS := -L$(BOARD_DIR)/lib -L$(LIBCRYPTO_BUILD_DIR)
 
 LIBS := -lmicrokit -Tmicrokit.ld
 
@@ -93,10 +95,6 @@ $(BUILD_DIR)/%.o: %.c Makefile
 $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g -mcpu=$(CPU) $< -o $@
 
-# Crypto files
-$(BUILD_DIR)/%.o: $(CRYPTO_PATH)/%.c Makefile
-	$(CC) -c $(CFLAGS) $< -o $@
-
 # Generate patched ELF files
 $(PATCHED_RECEIVER_ELF): $(BUILD_DIR)/receiver.elf
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
@@ -110,9 +108,9 @@ $(PATCHED_SENDER_ELF): $(BUILD_DIR)/sender.elf
 # Link trusted_loader.elf
 $(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \
                                  $(BUILD_DIR)/$(ELF_UTILS_OBJS) \
-								 $(BUILD_DIR)/${CRYPTO_OBJS} \
+								 ${LIBCRYPTO} \
                                  programs.o
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@ -lcrypto
 
 $(BUILD_DIR)/receiver_loader.elf: $(BUILD_DIR)/$(RECEIVER_LOADER_OBJS) \
  								  $(BUILD_DIR)/$(ELF_UTILS_OBJS) \
