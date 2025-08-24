@@ -43,6 +43,7 @@ AS := $(TOOLCHAIN)-as
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 PYTHON	:= $(PWD)/pyenv/bin/python
+CRYPTO_PATH := crypto/
 
 # Object files
 TRUSTED_LOADER_OBJS := trusted_loader.o
@@ -91,6 +92,10 @@ $(BUILD_DIR)/%.o: %.c Makefile
 # Assemble assembly source files
 $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g -mcpu=$(CPU) $< -o $@
+
+# Crypto files
+$(BUILD_DIR)/%.o: $(CRYPTO_PATH)/%.c Makefile
+	$(CC) -c $(CFLAGS) $< -o $@
 
 # Generate patched ELF files
 $(PATCHED_RECEIVER_ELF): $(BUILD_DIR)/receiver.elf
