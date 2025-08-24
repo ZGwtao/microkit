@@ -25,14 +25,6 @@ ifeq ($(strip $(SYSTEM_HASH)),)
 $(error SYSTEM_HASH must be specified)
 endif
 
-ifeq ($(strip $(PRIVATE_KEY)),)
-$(error PRIVATE_KEY must be specified)
-endif
-
-ifeq ($(strip $(PUBLIC_KEY)),)
-$(error PUBLIC_KEY must be specified)
-endif
-
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
 CPU := cortex-a53
@@ -53,7 +45,6 @@ RECEIVER_OBJS := receiver.o
 RECEIVER2_OBJS := receiver2.o
 SENDER_OBJS := sender.o
 ELF_UTILS_OBJS := elf_utils.o
-# CRYPTO_OBJS := fe.o ge.o key_exchange.o keypair.o sc.o sha512.o sign.o verify.o
 RECEIVER_LOADER_OBJS := receiver_loader.o
 SENDER_LOADER_OBJS := sender_loader.o
 
@@ -97,7 +88,7 @@ all: $(IMAGE_FILE)
 $(PRIVATE_KEY_FILE) $(PUBLIC_KEY_FILE): $(KEYS_STAMP)
 
 $(KEYS_STAMP): $(KEYS_GENERATOR)
-	@$(info $(shell mkdir -p KEYS_GEN_DIR))
+	@$(info $(shell mkdir -p $(KEYS_GEN_DIR)))
 	$(PYTHON) $(KEYS_GENERATOR) $(KEYS_GEN_DIR)
 
 # Compile C source files
