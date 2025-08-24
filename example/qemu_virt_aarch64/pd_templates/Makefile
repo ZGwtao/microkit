@@ -4,18 +4,13 @@
 # SPDX-License-Identifier: BSD-2-Clause
 #
 
-# Ensure required variables are specified
-
-ifeq ($(strip $(SYSTEM_HASH)),)
-$(error SYSTEM_HASH must be specified)
-endif
-
 MICROKIT_BOARD ?= qemu_virt_aarch64
 MICROKIT_CONFIG ?= release
 BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
+SYSTEM_HASH	?= 0x79e60a3e13efcb37
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
