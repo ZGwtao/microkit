@@ -5,25 +5,17 @@
 #
 
 # Ensure required variables are specified
-ifeq ($(strip $(BUILD_DIR)),)
-$(error BUILD_DIR must be specified)
-endif
-
-ifeq ($(strip $(MICROKIT_SDK)),)
-$(error MICROKIT_SDK must be specified)
-endif
-
-ifeq ($(strip $(MICROKIT_BOARD)),)
-$(error MICROKIT_BOARD must be specified)
-endif
-
-ifeq ($(strip $(MICROKIT_CONFIG)),)
-$(error MICROKIT_CONFIG must be specified)
-endif
 
 ifeq ($(strip $(SYSTEM_HASH)),)
 $(error SYSTEM_HASH must be specified)
 endif
+
+MICROKIT_BOARD ?= qemu_virt_aarch64
+MICROKIT_CONFIG ?= release
+BUILD_DIR ?= build
+
+MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
+MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
@@ -34,7 +26,7 @@ LD := $(TOOLCHAIN)-ld
 AS := $(TOOLCHAIN)-as
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
-PYTHON	:= $(PWD)/pyenv/bin/python
+PYTHON ?= $(MICROKIT_SRC_DIR)/pyenv/bin/python
 
 LIBCRYPTO_SRC_DIR := $(CURDIR)/crypto
 LIBEXTELF_SRC_DIR := $(CURDIR)/extelf
