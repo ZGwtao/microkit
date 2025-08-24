@@ -5,7 +5,7 @@
 #
 
 MICROKIT_BOARD ?= qemu_virt_aarch64
-MICROKIT_CONFIG ?= release
+MICROKIT_CONFIG ?= debug
 BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
@@ -142,6 +142,16 @@ $(BUILD_DIR)/sender.elf: $(BUILD_DIR)/$(SENDER_OBJS) \
 $(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) pd_templates.system
 	$(MICROKIT_TOOL) pd_templates.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) \
 		-o $(IMAGE_FILE) -r $(REPORT_FILE) -p $(PUBLIC_KEY_FILE)
+
+qemu: $(IMAGE_FILE)
+	qemu-system-aarch64 \
+		-machine virt,virtualization=on \
+		-cpu $(CPU) \
+		-nographic \
+		-serial mon:stdio \
+		-device loader,file=$(IMAGE_FILE),addr=0x70000000,cpu-num=0 \
+		-device loader,addr=0x90000000,data=0x61,data-len=1 \
+		-m size=2G
 
 # Clean target
 clean:
