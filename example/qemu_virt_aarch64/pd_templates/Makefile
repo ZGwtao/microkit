@@ -42,6 +42,7 @@ LD := $(TOOLCHAIN)-ld
 AS := $(TOOLCHAIN)-as
 
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
+PYTHON	:= $(PWD)/pyenv/bin/python
 
 # Object files
 TRUSTED_LOADER_OBJS := trusted_loader.o
@@ -93,13 +94,13 @@ $(BUILD_DIR)/%.o: %.s Makefile
 
 # Generate patched ELF files
 $(PATCHED_RECEIVER_ELF): $(BUILD_DIR)/receiver.elf
-	python patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
+	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
 $(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf
-	python patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
+	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
 $(PATCHED_SENDER_ELF): $(BUILD_DIR)/sender.elf
-	python patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
+	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
 # Link trusted_loader.elf
 $(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \

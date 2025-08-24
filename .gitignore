@@ -12,6 +12,7 @@ pyenv/
 release/
 tmp_build/
 target/
+*.o
 *.orig
 .DS_Store
 arm-gnu-toolchain*
