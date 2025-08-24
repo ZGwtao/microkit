@@ -31,7 +31,6 @@ LIBEXTELF_BUILD_DIR := $(BUILD_DIR)/libextelf
 LIBEXTELF_OBJS := $(addprefix $(LIBEXTELF_BUILD_DIR)/,$(EXTELF_OBJS))
 LIBEXTELF := $(LIBEXTELF_BUILD_DIR)/libextelf.a
 
-LIBEXTELF_MICROKIT_CFLAGS := -I$(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)/include
 LIBEXTELF_CFLAGS ?= -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 \
           			-Wall -Wno-unused-function -Werror \
           			-I$(BOARD_DIR)/include
@@ -43,7 +42,7 @@ libextelf_dir:
 	$(info $(shell mkdir -p $(BUILD_DIR)/libextelf))
 
 $(LIBEXTELF_OBJS): $(LIBEXTELF_BUILD_DIR)/%.o : $(LIBEXTELF_SRC_DIR)/%.c
-	$(CC) -c $(LIBEXTELF_CFLAGS) $(LIBEXTELF_MICROKIT_CFLAGS) $< -o $@
+	$(CC) -c $(LIBEXTELF_CFLAGS) $< -o $@
 
 $(LIBEXTELF): $(LIBEXTELF_OBJS)
 	$(AR) rcs $@ $^
