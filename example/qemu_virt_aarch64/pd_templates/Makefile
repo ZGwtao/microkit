@@ -69,7 +69,14 @@ PATCHED_SENDER_ELF := $(BUILD_DIR)/sender_patched.elf
 IMAGES := $(BUILD_DIR)/trusted_loader.elf $(PATCHED_RECEIVER_ELF) $(PATCHED_SENDER_ELF) $(PATCHED_RECEIVER2_ELF) $(BUILD_DIR)/receiver_loader.elf $(BUILD_DIR)/sender_loader.elf
 
 # Private key file
-PRIVATE_KEY_FILE := $(PRIVATE_KEY)
+
+KEYS_GENERATOR	:= $(CURDIR)/keygen/generate_ed25519_keys.py
+KEYS_GEN_DIR	:= $(BUILD_DIR)/keygen
+PUBLIC_KEY_FILE	:= $(KEYS_GEN_DIR)/ed25519_public_key.bin
+PRIVATE_KEY_FILE := $(KEYS_GEN_DIR)/ed25519_private_key.pem
+KEYS_STAMP		:= .generated.stamp
+
+# PRIVATE_KEY_FILE ?= $(PRIVATE_KEY)
 
 # Compiler and linker flags
 CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 \
@@ -87,6 +94,12 @@ REPORT_FILE = $(BUILD_DIR)/report.txt
 # Default target
 all: $(IMAGE_FILE)
 
+$(PRIVATE_KEY_FILE) $(PUBLIC_KEY_FILE): $(KEYS_STAMP)
+
+$(KEYS_STAMP): $(KEYS_GENERATOR)
+	@$(info $(shell mkdir -p KEYS_GEN_DIR))
+	$(PYTHON) $(KEYS_GENERATOR) $(KEYS_GEN_DIR)
+
 # Compile C source files
 $(BUILD_DIR)/%.o: %.c Makefile
 	$(CC) -c $(CFLAGS) $< -o $@
@@ -96,13 +109,13 @@ $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g -mcpu=$(CPU) $< -o $@
 
 # Generate patched ELF files
-$(PATCHED_RECEIVER_ELF): $(BUILD_DIR)/receiver.elf
+$(PATCHED_RECEIVER_ELF): $(BUILD_DIR)/receiver.elf $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
-$(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf
+$(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
-$(PATCHED_SENDER_ELF): $(BUILD_DIR)/sender.elf
+$(PATCHED_SENDER_ELF): $(BUILD_DIR)/sender.elf $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
 # Link trusted_loader.elf
@@ -148,7 +161,7 @@ $(BUILD_DIR)/sender.elf: $(BUILD_DIR)/$(SENDER_OBJS) \
 # Generate final image and report
 $(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) pd_templates.system
 	$(MICROKIT_TOOL) pd_templates.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) \
-		-o $(IMAGE_FILE) -r $(REPORT_FILE) -p $(PUBLIC_KEY)
+		-o $(IMAGE_FILE) -r $(REPORT_FILE) -p $(PUBLIC_KEY_FILE)
 
 # Clean target
 clean:
