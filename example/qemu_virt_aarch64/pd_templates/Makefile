@@ -37,14 +37,15 @@ MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 PYTHON	:= $(PWD)/pyenv/bin/python
 
 LIBCRYPTO_SRC_DIR := $(CURDIR)/crypto
-include crypto/Makefile
+LIBEXTELF_SRC_DIR := $(CURDIR)/extelf
+include $(LIBCRYPTO_SRC_DIR)/Makefile
+include $(LIBEXTELF_SRC_DIR)/Makefile
 
 # Object files
 TRUSTED_LOADER_OBJS := trusted_loader.o
 RECEIVER_OBJS := receiver.o
 RECEIVER2_OBJS := receiver2.o
 SENDER_OBJS := sender.o
-ELF_UTILS_OBJS := elf_utils.o
 RECEIVER_LOADER_OBJS := receiver_loader.o
 SENDER_LOADER_OBJS := sender_loader.o
 
@@ -72,9 +73,11 @@ KEYS_STAMP		:= .generated.stamp
 # Compiler and linker flags
 CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 \
           -Wall -Wno-unused-function -Werror \
-          -I$(BOARD_DIR)/include
+          -I$(BOARD_DIR)/include \
+		  -I$(LIBCRYPTO_SRC_DIR)/include \
+		  -I$(LIBEXTELF_SRC_DIR)/include
 
-LDFLAGS := -L$(BOARD_DIR)/lib -L$(LIBCRYPTO_BUILD_DIR)
+LDFLAGS := -L$(BOARD_DIR)/lib -L$(LIBCRYPTO_BUILD_DIR) -L$(LIBEXTELF_BUILD_DIR)
 
 LIBS := -lmicrokit -Tmicrokit.ld
 
@@ -111,19 +114,16 @@ $(PATCHED_SENDER_ELF): $(BUILD_DIR)/sender.elf $(PRIVATE_KEY_FILE)
 
 # Link trusted_loader.elf
 $(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \
-                                 $(BUILD_DIR)/$(ELF_UTILS_OBJS) \
-								 ${LIBCRYPTO} \
+                                 ${LIBEXTELF} ${LIBCRYPTO} \
                                  programs.o
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@ -lcrypto
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/receiver_loader.elf: $(BUILD_DIR)/$(RECEIVER_LOADER_OBJS) \
- 								  $(BUILD_DIR)/$(ELF_UTILS_OBJS) \
-								  programs.o
+ 								  ${LIBEXTELF} programs.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
- 								$(BUILD_DIR)/$(ELF_UTILS_OBJS) \
-								programs.o
+ 								${LIBEXTELF} programs.o
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link programs.o with patched ELF dependencies
@@ -136,17 +136,17 @@ programs.o: package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_SENDER_ELF) $(P
 
 # Link receiver.elf
 $(BUILD_DIR)/receiver.elf: $(BUILD_DIR)/$(RECEIVER_OBJS) \
-                            $(BUILD_DIR)/$(ELF_UTILS_OBJS)
+                            ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link receiver2.elf
 $(BUILD_DIR)/receiver2.elf: $(BUILD_DIR)/$(RECEIVER2_OBJS) \
-                            $(BUILD_DIR)/$(ELF_UTILS_OBJS)
+                            ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link sender.elf
 $(BUILD_DIR)/sender.elf: $(BUILD_DIR)/$(SENDER_OBJS) \
-                          $(BUILD_DIR)/$(ELF_UTILS_OBJS)
+                          ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Generate final image and report
