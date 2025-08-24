@@ -49,6 +49,8 @@ SENDER_OBJS := sender.o
 RECEIVER_LOADER_OBJS := receiver_loader.o
 SENDER_LOADER_OBJS := sender_loader.o
 
+PACKAGE_PROGS_OBJS := $(BUILD_DIR)/programs.o
+
 # Board directory
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 
@@ -115,19 +117,19 @@ $(PATCHED_SENDER_ELF): $(BUILD_DIR)/sender.elf $(PRIVATE_KEY_FILE)
 # Link trusted_loader.elf
 $(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \
                                  ${LIBEXTELF} ${LIBCRYPTO} \
-                                 programs.o
+                                 $(PACKAGE_PROGS_OBJS)
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/receiver_loader.elf: $(BUILD_DIR)/$(RECEIVER_LOADER_OBJS) \
- 								  ${LIBEXTELF} programs.o
+ 								  ${LIBEXTELF} $(PACKAGE_PROGS_OBJS)
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
- 								${LIBEXTELF} programs.o
+ 								${LIBEXTELF} $(PACKAGE_PROGS_OBJS)
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link programs.o with patched ELF dependencies
-programs.o: package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_SENDER_ELF) $(PATCHED_RECEIVER2_ELF)
+$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_SENDER_ELF) $(PATCHED_RECEIVER2_ELF)
 	$(CC) -c -g3 -x assembler-with-cpp \
 		-DRECEIVER_PATH=\"$(PATCHED_RECEIVER_ELF)\" \
 		-DSENDER_PATH=\"$(PATCHED_SENDER_ELF)\" \
