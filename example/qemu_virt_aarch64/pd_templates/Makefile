@@ -10,7 +10,7 @@ BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
-SYSTEM_HASH	?= 0x2a0a7a61f0d216f7
+SYSTEM_HASH	?= 0x5a52688384b13ba0
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
@@ -32,6 +32,7 @@ include $(LIBEXTELF_SRC_DIR)/Makefile
 TRUSTED_LOADER_OBJS := trusted_loader.o
 RECEIVER_OBJS := receiver.o
 RECEIVER2_OBJS := receiver2.o
+CLIENT_OBJS	:= client.o
 RECEIVER_LOADER_OBJS := receiver_loader.o
 
 PACKAGE_PROGS_OBJS := $(BUILD_DIR)/programs.o
@@ -43,8 +44,12 @@ BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 PATCHED_RECEIVER_ELF := $(BUILD_DIR)/receiver_patched.elf
 PATCHED_RECEIVER2_ELF := $(BUILD_DIR)/receiver2_patched.elf
 
+CLIENT_ELF := $(BUILD_DIR)/client.elf
+
 # Images to include patched ELF files
-IMAGES := $(BUILD_DIR)/trusted_loader.elf $(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF) $(BUILD_DIR)/receiver_loader.elf
+IMAGES := $(BUILD_DIR)/trusted_loader.elf \
+			$(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) \
+			$(BUILD_DIR)/receiver_loader.elf
 
 # Private key file
 
@@ -106,10 +111,11 @@ $(BUILD_DIR)/receiver_loader.elf: $(BUILD_DIR)/$(RECEIVER_LOADER_OBJS) \
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link programs.o with patched ELF dependencies
-$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF)
+$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF)
 	$(CC) -c -g3 -x assembler-with-cpp \
 		-DRECEIVER_PATH=\"$(PATCHED_RECEIVER_ELF)\" \
 		-DRECEIVER2_PATH=\"$(PATCHED_RECEIVER2_ELF)\" \
+		-DCLIENT_PATH=\"$(CLIENT_ELF)\" \
 		package_programs.S -o $@
 
 # Link receiver.elf
@@ -121,6 +127,9 @@ $(BUILD_DIR)/receiver.elf: $(BUILD_DIR)/$(RECEIVER_OBJS) \
 $(BUILD_DIR)/receiver2.elf: $(BUILD_DIR)/$(RECEIVER2_OBJS) \
                             ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(CLIENT_ELF): $(BUILD_DIR)/$(CLIENT_OBJS)
+	$(LD) $(LDFLAGS) -Ttext=0xB000000 $^ $(LIBS) -o $@
 
 # Generate final image and report
 $(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) pd_templates.system

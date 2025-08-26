@@ -79,7 +79,8 @@ seL4_Word irqs[MICROKIT_MAX_CHANNELS];
 MemoryMapping mappings[MAX_MAPPINGS];
 uintptr_t user_program;
 uintptr_t client_program;
-uintptr_t shared;
+uintptr_t shared1;
+uintptr_t shared2;
 seL4_Word system_hash;
 
 // Global variables
@@ -113,7 +114,7 @@ void notified(microkit_channel ch)
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     microkit_dbg_printf(PROGNAME "Received protected message on channel: %d\n", ch);
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared;
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
     if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
         microkit_dbg_printf(PROGNAME "Data in shared memory region must be an ELF file\n");
@@ -172,8 +173,8 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
     load_elf((void*)user_program, ehdr);
     microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
 
-    custom_memcpy((void*)client_program, (char *)shared, 0x800000);
-    microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
+    custom_memcpy((void*)client_program, (char *)shared2, 0x800000);
+    microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
 
     // Restart the child PD at the entry point
     microkit_pd_restart(CHILD_ID, ehdr->e_entry);

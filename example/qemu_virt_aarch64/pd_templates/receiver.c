@@ -15,8 +15,32 @@
 
 static uintptr_t test = 0x4000000;
 static uintptr_t client_elf = 0xA000000;
+uintptr_t client_start;
 
 typedef void (*entry_fn_t)(void);
+
+static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
+{
+    Elf64_Phdr *phdr = (Elf64_Phdr *)((char*)ehdr + ehdr->e_phoff);
+
+    for (int i = 0; i < ehdr->e_phnum; i++) {
+        if (phdr[i].p_type != PT_LOAD) {
+            continue;
+        }
+
+        void *src = (char*)ehdr + phdr[i].p_offset;
+        void *dest = (void *)(dest_vaddr + phdr[i].p_vaddr - ehdr->e_entry);
+
+        custom_memcpy(dest, src, phdr[i].p_filesz);
+
+        if (phdr[i].p_memsz > phdr[i].p_filesz) {
+            seL4_Word bss_size = phdr[i].p_memsz - phdr[i].p_filesz;
+            custom_memset((char *)dest + phdr[i].p_filesz, 0, bss_size);
+        }
+    }
+
+    microkit_dbg_printf(PROGNAME "Loaded ELF segments into memory\n");
+}
 
 void init(void)
 {
@@ -35,8 +59,10 @@ void init(void)
     }
     microkit_dbg_printf(PROGNAME "Verified ELF header\n");
 
-    uintptr_t entry = ehdr->e_entry;
-    entry_fn_t entry_fn = (entry_fn_t) entry;
+    client_start = ehdr->e_entry;
+    load_elf((void *)client_start, ehdr);
+
+    entry_fn_t entry_fn = (entry_fn_t) client_start;
 
     entry_fn();
 
