@@ -6,6 +6,7 @@
 -->
 <system>
     <memory_region name="receiver_program" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="client_program" size="0x800_000" page_size="0x200_000" />
     <memory_region name="test" size="0x800_000" page_size="0x200_000" />
 
     <memory_region name="trusted_loader1_shared" size="0x800_000" page_size="0x200_000" />
@@ -13,12 +14,14 @@
     <protection_domain_template name="trusted_loader1" priority="254">
         <program_image path="trusted_loader.elf" />
         <map mr="receiver_program" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="user_program" />
+        <map mr="client_program" vaddr="0xA00000000" perms="rw" cached="true" setvar_vaddr="client_program" />
         <map mr="trusted_loader1_shared" vaddr="0x6000000" perms="rw" cached="true" setvar_vaddr="shared" />
 
         <protection_domain name="receiver" id="1" priority="253">
             <!-- <program_image path="receiver.elf" /> -->
             <!-- remember to set execute perms for this mapping -->
             <map mr="receiver_program" vaddr="0x200000" perms="rwx" cached="true" />
+            <map mr="client_program" vaddr="0xA000000" perms="rwx" cached="true" optional="true" />
             <map mr="test" vaddr="0x4000000" perms="rw" cached="true" optional="true" />
             <irq irq="0" id="5" optional="true" />
         </protection_domain>

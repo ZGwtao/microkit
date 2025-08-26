@@ -78,6 +78,7 @@ seL4_Word channels[MICROKIT_MAX_CHANNELS];
 seL4_Word irqs[MICROKIT_MAX_CHANNELS];
 MemoryMapping mappings[MAX_MAPPINGS];
 uintptr_t user_program;
+uintptr_t client_program;
 uintptr_t shared;
 seL4_Word system_hash;
 
@@ -169,6 +170,9 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
     removed_caps = true;
 
     load_elf((void*)user_program, ehdr);
+    microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
+
+    custom_memcpy((void*)client_program, (char *)shared, 0x800000);
     microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
 
     // Restart the child PD at the entry point
