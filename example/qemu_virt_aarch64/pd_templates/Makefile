@@ -10,7 +10,7 @@ BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
-SYSTEM_HASH	?= 0x5a52688384b13ba0
+SYSTEM_HASH	?= 0xcfe62dc1c405789c
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
@@ -33,6 +33,7 @@ TRUSTED_LOADER_OBJS := trusted_loader.o
 RECEIVER_OBJS := receiver.o
 RECEIVER2_OBJS := receiver2.o
 CLIENT_OBJS	:= client.o
+SENDER_LOADER_OBJS := sender_loader.o
 RECEIVER_LOADER_OBJS := receiver_loader.o
 
 PACKAGE_PROGS_OBJS := $(BUILD_DIR)/programs.o
@@ -49,7 +50,7 @@ CLIENT_ELF := $(BUILD_DIR)/client.elf
 # Images to include patched ELF files
 IMAGES := $(BUILD_DIR)/trusted_loader.elf \
 			$(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) \
-			$(BUILD_DIR)/receiver_loader.elf
+			$(BUILD_DIR)/receiver_loader.elf $(BUILD_DIR)/sender_loader.elf
 
 # Private key file
 
@@ -107,6 +108,10 @@ $(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/receiver_loader.elf: $(BUILD_DIR)/$(RECEIVER_LOADER_OBJS) \
+ 								  ${LIBEXTELF} $(PACKAGE_PROGS_OBJS)
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
  								  ${LIBEXTELF} $(PACKAGE_PROGS_OBJS)
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 

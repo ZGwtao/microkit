@@ -64,7 +64,7 @@ void init(void)
     microkit_dbg_printf(PROGNAME "Verified ELF header\n");
 
     microkit_dbg_printf(PROGNAME "Notify base notification\n");
-    microkit_notify(1);
+    microkit_notify(2);
     microkit_dbg_printf(PROGNAME "Succeed in notification\n");
 
     /* delete the cap to current CNode from background CNode */
@@ -74,14 +74,32 @@ void init(void)
     }
     microkit_dbg_printf(PROGNAME "Succeed in CNode cap deletion from background cap\n");
     /* delete the cap to notification from current CNode */
-    error = seL4_CNode_Delete(CNODE_SELF_CAP, BASE_OUTPUT_NOTIFICATION_CAP + 1, 10);
+    error = seL4_CNode_Delete(CNODE_SELF_CAP, 12, 10);
     if (error != seL4_NoError) {
         microkit_internal_crash(error);
     }
     microkit_dbg_printf(PROGNAME "Succeed in notification deletion\n");
     microkit_dbg_printf(PROGNAME "Try notify base notification\n");
-    microkit_notify(1);
+    microkit_notify(2);
     microkit_dbg_printf(PROGNAME "Failed in notification invocation\n");
+
+    microkit_dbg_printf(PROGNAME "Copy the notification cap from background CNode\n");
+    error = seL4_CNode_Copy(
+                CNODE_SELF_CAP,
+                12,
+                10,
+                CNODE_BACKGROUND_CAP,
+                12,
+                10,
+                seL4_AllRights
+            );
+    if (error != seL4_NoError) {
+        microkit_internal_crash(error);
+    }
+    microkit_dbg_printf(PROGNAME "Succeed in notification restore\n");
+    microkit_dbg_printf(PROGNAME "Try notify base notification\n");
+    microkit_notify(2);
+    microkit_dbg_printf(PROGNAME "Succeed in notification\n");
 
     client_start = ehdr->e_entry;
     load_elf((void *)client_start, ehdr);

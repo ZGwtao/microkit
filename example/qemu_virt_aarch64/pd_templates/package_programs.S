@@ -29,11 +29,11 @@ _receiver_end:
 #endif
 
 #if defined(RECEIVER2_PATH)
-.section .receiver2, "aw", @progbits
-.global _receiver2, _receiver2_end
-_receiver2:
+.section ._sender, "aw", @progbits
+.global _sender, _sender_end
+_sender:
 .incbin RECEIVER2_PATH
-_receiver2_end:
+_sender_end:
 #endif
 
 #if defined(CLIENT_PATH)

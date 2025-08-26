@@ -6,11 +6,14 @@
 -->
 <system>
     <memory_region name="receiver_program" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="sender_program" size="0x800_000" page_size="0x200_000" />
     <memory_region name="client_program" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="client_program2" size="0x800_000" page_size="0x200_000" />
     <memory_region name="client_exec" size="0x800_000" page_size="0x200_000" />
     <memory_region name="test" size="0x800_000" page_size="0x200_000" />
 
     <memory_region name="trusted_loader1_shared" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="trusted_loader2_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="client_payload_shared" size="0x800_000" page_size="0x200_000" />
 
     <protection_domain_template name="trusted_loader1" priority="254">
@@ -37,9 +40,38 @@
         <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
     </protection_domain>
 
+    <protection_domain name="sender_loader" priority="249">
+        <program_image path="sender_loader.elf" />
+        <map mr="trusted_loader2_shared" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="shared1" />
+        <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
+    </protection_domain>
+
+    <protection_domain_template name="trusted_loader2" priority="252">
+        <program_image path="trusted_loader.elf" />
+        <map mr="sender_program" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="user_program" />
+        <map mr="client_program2" vaddr="0xA00000000" perms="rw" cached="true" setvar_vaddr="client_program" />
+        <map mr="trusted_loader2_shared" vaddr="0x6000000" perms="rw" cached="true" setvar_vaddr="shared1" />
+        <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
+
+        <protection_domain name="sender" id="1" priority="251">
+            <map mr="sender_program" vaddr="0x200000" perms="rwx" cached="true" />
+            <map mr="client_program2" vaddr="0xA000000" perms="rw" cached="true" optional="true" />
+        </protection_domain>
+    </protection_domain_template>
+
+    <channel optional="true">
+        <end pd="sender" id="1" />
+        <end pd="receiver" id="2" />
+    </channel>
+
     <channel>
         <end pd="receiver_loader" id="1" pp="true" />
         <end pd="trusted_loader1" id="2" />
+    </channel>
+
+    <channel>
+        <end pd="sender_loader" id="1" pp="true" />
+        <end pd="trusted_loader2" id="2" />
     </channel>
 
 </system>

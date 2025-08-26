@@ -7,16 +7,11 @@
 #include <stdint.h>
 #include <microkit.h>
 
-#define PROGNAME "[receiver2] "
-
-static uintptr_t test = 0x4000000;
+#define PROGNAME "[sender] "
 
 void init(void)
 {
     microkit_dbg_printf(PROGNAME "Entered init\n");
-    microkit_dbg_printf(PROGNAME "Writing to 0x%x\n", test);
-    *((uintptr_t*)test) = 0xdeadbeef;
-
     microkit_dbg_printf(PROGNAME "Finished init\n");
 }
 
