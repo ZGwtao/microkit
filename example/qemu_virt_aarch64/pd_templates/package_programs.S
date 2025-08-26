@@ -28,14 +28,6 @@ _receiver:
 _receiver_end:
 #endif
 
-#if defined(SENDER_PATH)
-.section .sender, "aw", @progbits
-.global _sender, _sender_end
-_sender:
-.incbin SENDER_PATH
-_sender_end:
-#endif
-
 #if defined(RECEIVER2_PATH)
 .section .receiver2, "aw", @progbits
 .global _receiver2, _receiver2_end
