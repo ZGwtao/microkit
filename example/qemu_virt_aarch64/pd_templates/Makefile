@@ -126,7 +126,7 @@ $(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_RECE
 # Link receiver.elf
 $(BUILD_DIR)/receiver.elf: $(BUILD_DIR)/$(RECEIVER_OBJS) \
                             ${LIBEXTELF}
-	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+	$(LD) $(LDFLAGS) --defsym __sel4_ipc_buffer=0x100000 $^ $(LIBS) -o $@
 
 # Link receiver2.elf
 $(BUILD_DIR)/receiver2.elf: $(BUILD_DIR)/$(RECEIVER2_OBJS) \

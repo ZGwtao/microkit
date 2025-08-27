@@ -39,6 +39,7 @@ use util::{
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
+const SYMBOL_IPC_BUFFER_DELAY: u64 = 0x100_000;
 
 const ED25519_PUBLIC_KEY_BYTES: usize = 32;
 
@@ -1762,7 +1763,7 @@ fn build_system(
             vaddrs.push((ipc_buffer_vaddr, PageSize::Small));
         } else {
             // println!("pd={} no ipc_buffer_vaddr", pd.name);
-            // vaddrs.push((0x204000, PageSize::Small));
+            vaddrs.push((SYMBOL_IPC_BUFFER_DELAY, PageSize::Small));
         }
 
         let mut upper_directory_vaddrs = HashSet::new();
@@ -3058,17 +3059,17 @@ fn build_system(
             ));
         } else {
             // println!("trying to map IPC buffer for empty pd {}", system.protection_domains[pd_idx].name);
-            //     let vaddr = 0x204000;
-            // system_invocations.push(Invocation::new(
-            //     config,
-            //     InvocationArgs::PageMap {
-            //         page: ipc_buffer_objs[pd_idx].cap_addr,
-            //         vspace: pd_vspace_objs[pd_idx].cap_addr,
-            //         vaddr,
-            //         rights: Rights::Read as u64 | Rights::Write as u64,
-            //         attr: ipc_buffer_attr,
-            //     },
-            // ));
+            let vaddr = SYMBOL_IPC_BUFFER_DELAY;
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::PageMap {
+                    page: ipc_buffer_objs[pd_idx].cap_addr,
+                    vspace: pd_vspace_objs[pd_idx].cap_addr,
+                    vaddr,
+                    rights: Rights::Read as u64 | Rights::Write as u64,
+                    attr: ipc_buffer_attr,
+                },
+            ));
         }
     }
 
@@ -3233,15 +3234,15 @@ fn build_system(
             ));
         } else {
             // println!("TcbSetIpcBuffer for empty pd {}", system.protection_domains[pd_idx].name);
-            // let ipc_buffer_vaddr = 0x204000;
-            // system_invocations.push(Invocation::new(
-            //     config,
-            //     InvocationArgs::TcbSetIpcBuffer {
-            //         tcb: tcb_objs[pd_idx].cap_addr,
-            //         buffer: ipc_buffer_vaddr,
-            //         buffer_frame: ipc_buffer_objs[pd_idx].cap_addr,
-            //     },
-            // ));
+            let ipc_buffer_vaddr = SYMBOL_IPC_BUFFER_DELAY;
+            system_invocations.push(Invocation::new(
+                config,
+                InvocationArgs::TcbSetIpcBuffer {
+                    tcb: tcb_objs[pd_idx].cap_addr,
+                    buffer: ipc_buffer_vaddr,
+                    buffer_frame: ipc_buffer_objs[pd_idx].cap_addr,
+                },
+            ));
         }
     }
 

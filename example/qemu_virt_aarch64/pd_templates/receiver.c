@@ -12,8 +12,10 @@
 #define PROGNAME "[receiver] "
 
 #define NOTIFICATION_BASE_CAP   10
+#define PD_CAP_BITS             10
 #define CNODE_BACKGROUND_CAP    588
 #define CNODE_SELF_CAP          589
+#define CNODE_PARENT_CAP        590
 
 #define PROG_TCB    (10+64+64+64)
 
@@ -48,6 +50,8 @@ static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
 
 void init(void)
 {
+    __sel4_ipc_buffer = (seL4_IPCBuffer *)0x100000;
+
     microkit_dbg_printf(PROGNAME "Entered init\n");
     microkit_dbg_printf(PROGNAME "Writing to 0x%x\n", test);
     *((uintptr_t*)test) = 0xdeadbeef;
@@ -85,14 +89,14 @@ void init(void)
 
     microkit_dbg_printf(PROGNAME "Copy the notification cap from background CNode\n");
     error = seL4_CNode_Copy(
-                CNODE_SELF_CAP,
-                12,
-                10,
-                CNODE_BACKGROUND_CAP,
-                12,
-                10,
-                seL4_AllRights
-            );
+            CNODE_SELF_CAP,
+            12,
+            PD_CAP_BITS,
+            CNODE_BACKGROUND_CAP,
+            12,
+            PD_CAP_BITS,
+            seL4_AllRights
+        );
     if (error != seL4_NoError) {
         microkit_internal_crash(error);
     }
