@@ -34,7 +34,8 @@ static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
 
     Elf64_Phdr *phdr = (Elf64_Phdr *)((char*)ehdr + ehdr->e_phoff);
 
-    for (int i = 0; i < ehdr->e_phnum; i++) {
+    /* the last section is access right table */
+    for (int i = 0; i < ehdr->e_phnum - 1; i++) {
         if (phdr[i].p_type != PT_LOAD) {
             continue;
         }
