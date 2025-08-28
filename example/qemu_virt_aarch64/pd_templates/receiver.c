@@ -8,6 +8,8 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <microkit.h>
+#include <ed25519.h>
+#include <libtrustedlo.h>
 
 #define PROGNAME "[receiver] "
 
@@ -21,12 +23,15 @@
 
 static uintptr_t test = 0x4000000;
 static uintptr_t client_elf = 0xA000000;
-uintptr_t client_start;
 
 typedef void (*entry_fn_t)(void);
 
+trusted_loader_t loader;
+
 static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
 {
+    microkit_dbg_printf(PROGNAME "Start to load ELF segments into memory\n");
+
     Elf64_Phdr *phdr = (Elf64_Phdr *)((char*)ehdr + ehdr->e_phoff);
 
     for (int i = 0; i < ehdr->e_phnum; i++) {
@@ -56,17 +61,6 @@ void init(void)
     microkit_dbg_printf(PROGNAME "Writing to 0x%x\n", test);
     *((uintptr_t*)test) = 0xdeadbeef;
     microkit_dbg_printf(PROGNAME "Finished init\n");
-
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)client_elf;
-
-    if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
-        microkit_dbg_printf(PROGNAME "Data in shared memory region must be an ELF file\n");
-        microkit_internal_crash(-1);
-    } else {
-        microkit_dbg_printf(PROGNAME "Data in shared memory region is an ELF file\n");
-    }
-    microkit_dbg_printf(PROGNAME "Verified ELF header\n");
-
     microkit_dbg_printf(PROGNAME "Notify base notification\n");
     microkit_notify(2);
     microkit_dbg_printf(PROGNAME "Succeed in notification\n");
@@ -105,13 +99,51 @@ void init(void)
     microkit_notify(2);
     microkit_dbg_printf(PROGNAME "Succeed in notification\n");
 
-    client_start = ehdr->e_entry;
-    load_elf((void *)client_start, ehdr);
+    /* start to parse client elf information */
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)client_elf;
+    /* check elf integrity */
+    if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
+        microkit_dbg_printf(PROGNAME "Data in shared memory region must be an ELF file\n");
+        microkit_internal_crash(-1);
+    } else {
+        microkit_dbg_printf(PROGNAME "Data in shared memory region is an ELF file\n");
+    }
+    microkit_dbg_printf(PROGNAME "Verified ELF header\n");
+    /* parse access rights table */
+    Elf64_Shdr *shdr = (Elf64_Shdr *)((char*)ehdr + ehdr->e_shoff);
+    const char *shstrtab = (char*)ehdr + shdr[ehdr->e_shstrndx].sh_offset;
 
-    entry_fn_t entry_fn = (entry_fn_t) client_start;
+    char *section = NULL;
+    seL4_Word section_size = 0;
 
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        const char *section_name = shstrtab + shdr[i].sh_name;
+        if (custom_strcmp(section_name, ".access_rights") == 0) {
+            section = (char*)ehdr + shdr[i].sh_offset;
+            section_size = shdr[i].sh_size;
+            break;
+        }
+    }
+
+    if (section == NULL) {
+        microkit_dbg_printf(PROGNAME ".access_rights section not found in ELF\n");
+        microkit_internal_crash(-1);
+    }
+
+    tsldr_init(&loader, ed25519_verify, 0xcfe62dc1c405789c, sizeof(seL4_Word), 64);
+    /* populate the access rights to the loader */
+    error = tsldr_populate_rights(&loader, (unsigned char *)section, section_size);
+    if (error) {
+        microkit_internal_crash(-1);
+    }
+    microkit_dbg_printf(PROGNAME "Finished up access rights integrity checking\n");
+    
+    load_elf((void *)ehdr->e_entry, ehdr);
+    microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
+
+    microkit_dbg_printf(PROGNAME "Switch to the client's code to execute\n");
+    entry_fn_t entry_fn = (entry_fn_t) ehdr->e_entry;
     entry_fn();
-
 }
 
 void notified(microkit_channel ch)

@@ -25,8 +25,10 @@ PYTHON ?= $(MICROKIT_SRC_DIR)/pyenv/bin/python
 
 LIBCRYPTO_SRC_DIR := $(CURDIR)/crypto
 LIBEXTELF_SRC_DIR := $(CURDIR)/extelf
+LIBTSLDR_SRC_DIR := $(CURDIR)/trustedloader
 include $(LIBCRYPTO_SRC_DIR)/Makefile
 include $(LIBEXTELF_SRC_DIR)/Makefile
+include $(LIBTSLDR_SRC_DIR)/Makefile
 
 # Object files
 TRUSTED_LOADER_OBJS := trusted_loader.o
@@ -44,6 +46,7 @@ BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 # Patched ELF file names
 PATCHED_RECEIVER_ELF := $(BUILD_DIR)/receiver_patched.elf
 PATCHED_RECEIVER2_ELF := $(BUILD_DIR)/receiver2_patched.elf
+PATCHED_CLIENT_ELF := $(BUILD_DIR)/client_patched.elf
 
 CLIENT_ELF := $(BUILD_DIR)/client.elf
 
@@ -67,9 +70,10 @@ CFLAGS := -mcpu=$(CPU) -mstrict-align -nostdlib -ffreestanding -g -O3 \
           -Wall -Wno-unused-function -Werror \
           -I$(BOARD_DIR)/include \
 		  -I$(LIBCRYPTO_SRC_DIR)/include \
-		  -I$(LIBEXTELF_SRC_DIR)/include
+		  -I$(LIBEXTELF_SRC_DIR)/include \
+		  -I$(LIBTSLDR_SRC_DIR)/include
 
-LDFLAGS := -L$(BOARD_DIR)/lib -L$(LIBCRYPTO_BUILD_DIR) -L$(LIBEXTELF_BUILD_DIR)
+LDFLAGS := -L$(BOARD_DIR)/lib -L$(LIBCRYPTO_BUILD_DIR) -L$(LIBEXTELF_BUILD_DIR) -L$(LIBTSLDR_BUILD_DIR)
 
 LIBS := -lmicrokit -Tmicrokit.ld
 
@@ -101,6 +105,9 @@ $(PATCHED_RECEIVER_ELF): $(BUILD_DIR)/receiver.elf $(PRIVATE_KEY_FILE)
 $(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
+$(PATCHED_CLIENT_ELF): $(CLIENT_ELF) $(PRIVATE_KEY_FILE)
+	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
+
 # Link trusted_loader.elf
 $(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \
                                  ${LIBEXTELF} ${LIBCRYPTO} \
@@ -116,16 +123,16 @@ $(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link programs.o with patched ELF dependencies
-$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF)
+$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF)
 	$(CC) -c -g3 -x assembler-with-cpp \
 		-DRECEIVER_PATH=\"$(PATCHED_RECEIVER_ELF)\" \
 		-DRECEIVER2_PATH=\"$(PATCHED_RECEIVER2_ELF)\" \
-		-DCLIENT_PATH=\"$(CLIENT_ELF)\" \
+		-DCLIENT_PATH=\"$(PATCHED_CLIENT_ELF)\" \
 		package_programs.S -o $@
 
 # Link receiver.elf
 $(BUILD_DIR)/receiver.elf: $(BUILD_DIR)/$(RECEIVER_OBJS) \
-                            ${LIBEXTELF}
+                            ${LIBEXTELF} $(LIBCRYPTO) $(LIBTSLDR)
 	$(LD) $(LDFLAGS) --defsym __sel4_ipc_buffer=0x100000 $^ $(LIBS) -o $@
 
 # Link receiver2.elf
