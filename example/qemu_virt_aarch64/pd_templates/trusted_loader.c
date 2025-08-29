@@ -83,6 +83,27 @@ uintptr_t shared1;
 uintptr_t shared2;
 seL4_Word system_hash;
 
+#define TSLDR_MD_SIZE 0x1000
+typedef struct {
+    seL4_Word system_hash;
+    unsigned char public_key[ED25519_PUBLIC_KEY_BYTES];
+    seL4_Word channels[MICROKIT_MAX_CHANNELS];
+    seL4_Word irqs[MICROKIT_MAX_CHANNELS];
+    MemoryMapping mappings[MICROKIT_MAX_CHANNELS];
+    /* for recording ... */
+    bool init;
+    uint8_t padding[TSLDR_MD_SIZE
+                    - ( sizeof(seL4_Word) 
+                      + ED25519_PUBLIC_KEY_BYTES 
+                      + sizeof(seL4_Word) * MICROKIT_MAX_CHANNELS 
+                      + sizeof(seL4_Word) * MICROKIT_MAX_CHANNELS 
+                      + sizeof(MemoryMapping) * MICROKIT_MAX_CHANNELS
+                      + sizeof(bool) )];
+} tsldr_md_t;
+
+/* 4KB in size */
+uintptr_t tsldr_metadata;
+
 // Global variables
 static AccessRights access_rights = {0};
 static bool allowed_channels[MICROKIT_MAX_CHANNELS] = {false};
@@ -145,6 +166,17 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
     }
 
     seL4_Error error;
+
+    /* initialise trusted loader metadata */
+    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+    if (!md->init) {
+        md->system_hash = system_hash;
+        custom_memcpy(md->public_key, public_key, sizeof(md->public_key));
+        custom_memcpy(md->channels,   channels,   sizeof(md->channels));
+        custom_memcpy(md->irqs,       irqs,       sizeof(md->irqs));
+        custom_memcpy(md->mappings,   mappings,   sizeof(md->mappings));
+        md->init = true;
+    }
 
     // Verify the signature (only the relevant part of the section)
     error = populate_rights(

@@ -21,7 +21,8 @@
 
 #define PROG_TCB    (10+64+64+64)
 
-static uintptr_t test = 0x4000000;
+/* 4KB in size, read-only */
+uintptr_t tsldr_metadata = 0x4000000;
 static uintptr_t client_elf = 0xA000000;
 
 typedef void (*entry_fn_t)(void);
@@ -59,9 +60,6 @@ void init(void)
     __sel4_ipc_buffer = (seL4_IPCBuffer *)0x100000;
 
     microkit_dbg_printf(PROGNAME "Entered init\n");
-    microkit_dbg_printf(PROGNAME "Writing to 0x%x\n", test);
-    *((uintptr_t*)test) = 0xdeadbeef;
-    microkit_dbg_printf(PROGNAME "Finished init\n");
     microkit_dbg_printf(PROGNAME "Notify base notification\n");
     microkit_notify(2);
     microkit_dbg_printf(PROGNAME "Succeed in notification\n");
@@ -100,6 +98,18 @@ void init(void)
     microkit_notify(2);
     microkit_dbg_printf(PROGNAME "Succeed in notification\n");
 
+    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+    if (!md->init) {
+        microkit_internal_crash(-1);
+    }
+    /* initialise the real trusted loader... */
+    if (loader.init != true) {
+        tsldr_init(&loader, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
+        custom_memcpy(loader.public_key, md->public_key, sizeof(md->public_key));
+        /* loader is now initialised... */
+        loader.init = true;
+    }
+
     /* start to parse client elf information */
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)client_elf;
     /* check elf integrity */
@@ -131,7 +141,6 @@ void init(void)
         microkit_internal_crash(-1);
     }
 
-    tsldr_init(&loader, ed25519_verify, 0xcfe62dc1c405789c, sizeof(seL4_Word), 64);
     /* populate the access rights to the loader */
     error = tsldr_populate_rights(&loader, (unsigned char *)section, section_size);
     if (error) {

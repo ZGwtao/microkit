@@ -44,6 +44,27 @@ typedef struct {
 } MemoryMapping;
 
 
+#define TSLDR_MD_SIZE 0x1000
+typedef struct {
+    seL4_Word system_hash;
+    unsigned char public_key[PUBLIC_KEY_BYTES];
+    seL4_Word channels[MICROKIT_MAX_CHANNELS];
+    seL4_Word irqs[MICROKIT_MAX_CHANNELS];
+    MemoryMapping mappings[MICROKIT_MAX_CHANNELS];
+    /* for recording ... */
+    bool init;
+    uint8_t padding[TSLDR_MD_SIZE
+                    - ( sizeof(seL4_Word) 
+                      + PUBLIC_KEY_BYTES 
+                      + sizeof(seL4_Word) * MICROKIT_MAX_CHANNELS 
+                      + sizeof(seL4_Word) * MICROKIT_MAX_CHANNELS 
+                      + sizeof(MemoryMapping) * MICROKIT_MAX_CHANNELS
+                      + sizeof(bool) )];
+} tsldr_md_t;
+_Static_assert(sizeof(tsldr_md_t) == TSLDR_MD_SIZE,
+               "tsldr_md_t must be exactly one page");
+
+
 typedef int (*crypto_verify_fn)(const unsigned char *signature,
                                 const unsigned char *data,
                                 size_t data_size,
@@ -72,6 +93,8 @@ typedef struct {
     bool removed_caps;
 
     /* crypto */
+    bool init;
+
     seL4_Word system_hash;
 
     size_t hash_len;
