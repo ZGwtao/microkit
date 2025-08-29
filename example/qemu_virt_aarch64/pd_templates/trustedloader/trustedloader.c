@@ -100,6 +100,71 @@ seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *
     return seL4_NoError;
 }
 
+#if 0
+seL4_Error tsldr_populate_allowed(trusted_loader_t *loader)
+{
+    if (!loader) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
+        return seL4_InvalidArgument;
+    }
+    AccessRights *rights = &loader->access_rights;
+    // Reset allowed lists
+    custom_memset(loader->allowed_channels, 0, sizeof(loader->allowed_channels));
+    custom_memset(loader->allowed_irqs, 0, sizeof(loader->allowed_irqs));
+    loader->num_allowed_mappings = 0;
+
+    for (uint32_t i = 0; i < rights->num_entries; i++) {
+        const AccessRightEntry *entry = &rights->entries[i];
+        switch (entry->type) {
+            case ACCESS_TYPE_CHANNEL:
+                if (entry->data < MICROKIT_MAX_CHANNELS && channels[entry->data]) {
+                    loader->allowed_channels[entry->data] = true;
+                    microkit_dbg_printf(PROGNAME "Allowed channel ID: %d\n", (unsigned long long)entry->data);
+                } else {
+                    microkit_dbg_printf(PROGNAME "Invalid channel ID: %d\n", (unsigned long long)entry->data);
+                    return seL4_InvalidArgument;
+                }
+                break;
+
+            case ACCESS_TYPE_IRQ:
+                if (entry->data < MICROKIT_MAX_CHANNELS && irqs[entry->data]) {
+                    loader->allowed_irqs[entry->data] = true;
+                    microkit_dbg_printf(PROGNAME "Allowed IRQ ID: %d\n", (unsigned long long)entry->data);
+                } else {
+                    microkit_dbg_printf(PROGNAME "Invalid IRQ ID: %d\n", (unsigned long long)entry->data);
+                    return seL4_InvalidArgument;
+                }
+                break;
+
+            case ACCESS_TYPE_MEMORY:
+            /*
+                if (loader->num_allowed_mappings < MAX_MAPPINGS) {
+                    seL4_Word vaddr = entry->data;
+                    MemoryMapping *mapping = find_mapping_by_vaddr(vaddr);
+                    if (mapping != NULL) {
+                        allowed_mappings[loader->num_allowed_mappings++] = *mapping;
+                        microkit_dbg_printf(PROGNAME "Allowed memory vaddr: 0x%x\n", (unsigned long long)vaddr);
+                    } else {
+                        microkit_dbg_printf(PROGNAME "Mapping not found for vaddr: 0x%x\n", (unsigned long long)vaddr);
+                        return seL4_InvalidArgument;
+                    }
+                } else {
+                    microkit_dbg_printf(PROGNAME "Number of allowed mappings exceeded\n");
+                    return seL4_InvalidArgument;
+                }
+            */
+                break;
+
+            default:
+                microkit_dbg_printf(PROGNAME "Unknown access type: %d\n", (unsigned int)entry->type);
+                return seL4_InvalidArgument;
+        }
+    }
+
+    return seL4_NoError;
+}
+#endif
+
 void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_val, size_t hash_len, size_t signature_len)
 {
     if (!loader) {

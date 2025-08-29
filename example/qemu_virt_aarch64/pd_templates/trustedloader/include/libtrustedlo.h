@@ -95,6 +95,13 @@ typedef struct {
 seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *signed_message, size_t len);
 
 /**
+ * @brief Applies access rights to build allowed lists
+ *
+ * @param loader Pointer to the loader which contains recorded access rights table
+ */
+seL4_Error tsldr_populate_allowed(trusted_loader_t *loader);
+
+/**
  * @brief Initialise a trusted loader
  *
  * @param loader Pointer to the trusted loader to initialise
