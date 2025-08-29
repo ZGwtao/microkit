@@ -94,4 +94,13 @@ typedef struct {
  */
 seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *signed_message, size_t len);
 
+/**
+ * @brief Initialise a trusted loader
+ *
+ * @param loader Pointer to the trusted loader to initialise
+ * @param fn Function pointer to the verifying mechanism
+ * @param hash_val System hash value
+ * @param hash_len Length of the system hash value
+ * @param signature_len Length of the access right table signature
+ */
 void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_val, size_t hash_len, size_t signature_len);
