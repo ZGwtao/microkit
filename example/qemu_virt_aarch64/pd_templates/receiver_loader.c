@@ -31,8 +31,16 @@ void init(void)
 
     microkit_msginfo info;
     seL4_Error error;
-    
-    info = microkit_ppcall(1, microkit_msginfo_new(0, 0));
+
+    microkit_mr_set(0, 1);
+    info = microkit_ppcall(1, microkit_msginfo_new(0, 1));
+    error = microkit_msginfo_get_label(info);
+    if (error != seL4_NoError) {
+        microkit_internal_crash(error);
+    }
+
+    microkit_mr_set(0, 2);
+    info = microkit_ppcall(1, microkit_msginfo_new(0, 1));
     error = microkit_msginfo_get_label(info);
     if (error != seL4_NoError) {
         microkit_internal_crash(error);

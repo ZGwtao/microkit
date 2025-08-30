@@ -119,6 +119,8 @@ static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr);
 static MemoryMapping* find_mapping_by_vaddr(seL4_Word vaddr);
 static void remove_caps();
 static void restore_caps();
+seL4_MessageInfo_t monitor_call_debute(void);
+seL4_MessageInfo_t monitor_call_restart(void);
 
 void init(void)
 {
@@ -135,6 +137,31 @@ void notified(microkit_channel ch)
 seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     microkit_dbg_printf(PROGNAME "Received protected message on channel: %d\n", ch);
+
+    /* get the first word of the message */
+    seL4_Word monitorcall_number = microkit_mr_get(0);
+
+    seL4_MessageInfo_t ret;
+
+    /* call for the container monitor */
+    switch (monitorcall_number) {
+    case 1:
+        microkit_dbg_printf(PROGNAME "Loading trusted loader and the first client\n");
+        ret = monitor_call_debute();
+        break;
+    case 2:
+        microkit_dbg_printf(PROGNAME "Restart trusted loader and a new client\n");
+        ret = monitor_call_restart();
+        break;
+    default:
+        ;
+    }
+
+    return ret;
+}
+
+seL4_MessageInfo_t monitor_call_debute(void)
+{
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
     if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
@@ -213,6 +240,13 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
     return microkit_msginfo_new(seL4_NoError, 0);
 }
+
+seL4_MessageInfo_t monitor_call_restart(void)
+{
+
+    return microkit_msginfo_new(seL4_NoError, 0);
+}
+
 
 seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)
 {
