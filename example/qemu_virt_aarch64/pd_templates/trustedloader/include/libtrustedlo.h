@@ -65,6 +65,15 @@ _Static_assert(sizeof(tsldr_md_t) == TSLDR_MD_SIZE,
                "tsldr_md_t must be exactly one page");
 
 
+#define PD_CAP_BITS     10
+
+#define CNODE_BACKGROUND_CAP    588
+
+#define CNODE_SELF_CAP          589
+#define CNODE_NOTIFICATION_BASE (10)
+#define CNODE_PPC_BASE          (CNODE_NOTIFICATION_BASE + 64)
+#define CNODE_IRQ_BASE          (CNODE_PPC_BASE + 64)
+
 typedef int (*crypto_verify_fn)(const unsigned char *signature,
                                 const unsigned char *data,
                                 size_t data_size,
@@ -134,3 +143,6 @@ seL4_Error tsldr_populate_allowed(trusted_loader_t *loader);
  * @param signature_len Length of the access right table signature
  */
 void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_val, size_t hash_len, size_t signature_len);
+
+
+void tsldr_remove_caps(trusted_loader_t *loader);

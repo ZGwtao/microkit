@@ -29,10 +29,6 @@ static MemoryMapping *find_mapping_by_vaddr(trusted_loader_t *loader, seL4_Word 
 
 static seL4_Word find_channel_by_index(trusted_loader_t *loader, seL4_Word index_data)
 {
-    if (!loader) {
-        microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
-        return 0;
-    }
     tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
     if (md->init != true || loader->init != true) {
         microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
@@ -43,10 +39,6 @@ static seL4_Word find_channel_by_index(trusted_loader_t *loader, seL4_Word index
 
 static seL4_Word find_irq_by_index(trusted_loader_t *loader, seL4_Word index_data)
 {
-    if (!loader) {
-        microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
-        return 0;
-    }
     tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
     if (md->init != true || loader->init != true) {
         microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
@@ -221,4 +213,76 @@ void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_va
     loader->system_hash = hash_val;
     loader->hash_len = hash_len;
     loader->signature_len = signature_len;
+}
+
+void tsldr_remove_caps(trusted_loader_t *loader)
+{
+    if (!loader) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
+        return;
+    }
+
+    // Delete disallowed channel capabilities
+    for (seL4_Word channel_id = 0; channel_id < MICROKIT_MAX_CHANNELS; channel_id++) {
+        if (loader->allowed_channels[channel_id] || !find_channel_by_index(loader, channel_id)) {
+            continue;
+        }
+
+        seL4_Error error = seL4_CNode_Delete(
+            CNODE_SELF_CAP,
+            BASE_OUTPUT_NOTIFICATION_CAP + channel_id,
+            PD_CAP_BITS
+        );
+
+        if (error != seL4_NoError) {
+            microkit_dbg_printf(LIB_NAME_MACRO "Failed to delete channel cap: channel_id=%d error=%d\n", channel_id, error);
+            microkit_internal_crash(error);
+        }
+
+        microkit_dbg_printf(LIB_NAME_MACRO "Deleted channel cap: channel_id=%d\n", channel_id);   
+    }
+
+    // Delete disallowed IRQ capabilities
+    for (seL4_Word irq_id = 0; irq_id < MICROKIT_MAX_CHANNELS; irq_id++) {
+        if (loader->allowed_irqs[irq_id] || !find_irq_by_index(loader, irq_id)) {
+            continue;
+        }
+
+        seL4_Error error = seL4_CNode_Delete(
+            CNODE_SELF_CAP,
+            CNODE_IRQ_BASE + irq_id,
+            PD_CAP_BITS
+        );
+
+        if (error != seL4_NoError) {
+            microkit_dbg_printf(LIB_NAME_MACRO "Failed to delete IRQ cap: irq_id=%d error=%d\n", irq_id, error);
+            microkit_internal_crash(error);
+        }
+
+        microkit_dbg_printf(LIB_NAME_MACRO "Deleted IRQ cap: irq_id=%d\n", irq_id);
+    }
+
+    // Map only the allowed memory regions
+    for (seL4_Word i = 0; i < loader->num_allowed_mappings; i++) {
+        const MemoryMapping *mapping = &loader->allowed_mappings[i];
+        microkit_dbg_printf(LIB_NAME_MACRO "Mapping allowed memory: vaddr=0x%x\n", mapping->vaddr);
+
+        seL4_CapRights_t rights = seL4_AllRights;
+        rights.words[0] = mapping->rights;
+
+        seL4_Error error = seL4_ARM_Page_Map(
+            mapping->page,
+            11,
+            mapping->vaddr,
+            rights,
+            mapping->attrs
+        );
+
+        if (error != seL4_NoError) {
+            microkit_dbg_printf(LIB_NAME_MACRO "Failed to map memory: vaddr=0x%x error=%d\n", mapping->vaddr, error);
+            microkit_internal_crash(error);
+        }
+
+        microkit_dbg_printf(LIB_NAME_MACRO "Mapped allowed memory: page=0x%x vaddr=0x%x\n", mapping->page, mapping->vaddr);
+    }
 }

@@ -14,10 +14,6 @@
 #define PROGNAME "[receiver] "
 
 #define NOTIFICATION_BASE_CAP   10
-#define PD_CAP_BITS             10
-#define CNODE_BACKGROUND_CAP    588
-#define CNODE_SELF_CAP          589
-#define CNODE_PARENT_CAP        590
 
 #define PROG_TCB    (10+64+64+64)
 
@@ -148,11 +144,16 @@ void init(void)
     }
     microkit_dbg_printf(PROGNAME "Finished up access rights integrity checking\n");
 
+
     /* (really) populate allowed access rights */
     error = tsldr_populate_allowed(&loader);
     if (error != seL4_NoError) {
         microkit_internal_crash(-1);
     }
+
+
+    tsldr_remove_caps(&loader);
+
     
     load_elf((void *)ehdr->e_entry, ehdr);
     microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
