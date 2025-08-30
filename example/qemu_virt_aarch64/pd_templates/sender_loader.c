@@ -16,6 +16,7 @@ extern char _client_end[];
 
 void init(void)
 {
+    while (1);
     microkit_dbg_printf(PROGNAME "Entered init\n");
 
     custom_memcpy((void *)shared1, _sender, _sender_end - _sender);
