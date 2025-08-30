@@ -11,6 +11,8 @@
     <memory_region name="client_program2" size="0x800_000" page_size="0x200_000" />
     <memory_region name="client_exec" size="0x800_000" page_size="0x200_000" />
 
+    <memory_region name="client_test" size="0x800_000" page_size="0x200_000" />
+
     <memory_region name="trusted_loader1_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="trusted_loader2_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="client_payload_shared" size="0x800_000" page_size="0x200_000" />
@@ -30,6 +32,7 @@
             <map mr="receiver_program" vaddr="0x200000" perms="rwx" cached="true" />
             <map mr="client_program" vaddr="0xA000000" perms="rw" cached="true" optional="true" />
             <map mr="client_exec" vaddr="0xB000000" perms="rwx" cached="true" optional="true" />
+            <map mr="client_test" vaddr="0xC000000" perms="rwx" cached="true" optional="true" />
             <map mr="trusted_loader_md" vaddr="0x4000000" perms="r" cached="true" />
             <irq irq="0" id="5" optional="true" />
         </protection_domain>

@@ -10,7 +10,7 @@ BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
-SYSTEM_HASH	?= 0x26ef6f2fa6d2bead
+SYSTEM_HASH	?= 0x3cacb8a8c3e8fc4b
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
