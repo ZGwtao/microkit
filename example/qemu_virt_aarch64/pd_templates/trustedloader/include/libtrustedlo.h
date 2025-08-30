@@ -68,11 +68,21 @@ _Static_assert(sizeof(tsldr_md_t) == TSLDR_MD_SIZE,
 #define PD_CAP_BITS     10
 
 #define CNODE_BACKGROUND_CAP    588
-
 #define CNODE_SELF_CAP          589
-#define CNODE_NOTIFICATION_BASE (10)
-#define CNODE_PPC_BASE          (CNODE_NOTIFICATION_BASE + 64)
-#define CNODE_IRQ_BASE          (CNODE_PPC_BASE + 64)
+#define CNODE_NTFN_BASE_CAP     (10)
+#define CNODE_PPC_BASE_CAP      (CNODE_NTFN_BASE_CAP + 64)
+#define CNODE_IRQ_BASE_CAP      (CNODE_PPC_BASE_CAP + 64)
+/* put it in somewhere in the middle of no where... */
+#define CNODE_VSPACE_CAP        (750)
+#define CNODE_BASE_MAPPING_CAP  (CNODE_VSPACE_CAP + 1)
+
+#define CNODE_CHILD_BASE_MAPPING_CAP    (10 + 8 * 64)
+
+#define BACKGROUND_VSPACE_CAP       9
+#define BACKGROUND_NTFN_BASE_CAP    10
+#define BACKGROUND_IRQ_BASE_CAP     (BACKGROUND_NTFN_BASE_CAP + 64)
+#define BACKGROUND_PPC_BASE_CAP     (BACKGROUND_IRQ_BASE_CAP + 64)
+#define BACKGROUND_MAPPING_BASE_CAP (BACKGROUND_PPC_BASE_CAP + 64)
 
 typedef int (*crypto_verify_fn)(const unsigned char *signature,
                                 const unsigned char *data,

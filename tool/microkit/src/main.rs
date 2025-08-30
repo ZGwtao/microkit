@@ -2682,7 +2682,7 @@ fn build_system(
                         system_invocations.push(Invocation::new(
                             config,
                             InvocationArgs::CnodeMint {
-                                cnode: bg_cnode_objs[pd_idx].cap_addr,
+                                cnode: bg_cnode_objs[maybe_child_idx].cap_addr,
                                 dest_index: bg_vspace_cap_idx,
                                 dest_depth: PD_CAP_BITS,
                                 src_root: root_cnode_cap,
