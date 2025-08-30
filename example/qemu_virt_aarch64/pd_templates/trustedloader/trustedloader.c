@@ -5,6 +5,56 @@
 
 #define LIB_NAME_MACRO "<libtrustedlo> "
 
+extern uintptr_t tsldr_metadata;
+
+static MemoryMapping *find_mapping_by_vaddr(trusted_loader_t *loader, seL4_Word vaddr)
+{
+    if (!loader) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
+        return NULL;
+    }
+    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+    if (md->init != true || loader->init != true) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
+        return NULL;
+    }
+
+    for (seL4_Word i = 0; i < MICROKIT_MAX_CHANNELS; i++) {
+        if (md->mappings[i].vaddr == vaddr) {
+            return &md->mappings[i];
+        }
+    }
+    return NULL;
+}
+
+static seL4_Word find_channel_by_index(trusted_loader_t *loader, seL4_Word index_data)
+{
+    if (!loader) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
+        return 0;
+    }
+    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+    if (md->init != true || loader->init != true) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
+        return 0;
+    }
+    return md->channels[index_data];
+}
+
+static seL4_Word find_irq_by_index(trusted_loader_t *loader, seL4_Word index_data)
+{
+    if (!loader) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
+        return 0;
+    }
+    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+    if (md->init != true || loader->init != true) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
+        return 0;
+    }
+    return md->irqs[index_data];
+}
+
 seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *signed_message, size_t len)
 {
     if (!loader) {
@@ -100,7 +150,6 @@ seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *
     return seL4_NoError;
 }
 
-#if 0
 seL4_Error tsldr_populate_allowed(trusted_loader_t *loader)
 {
     if (!loader) {
@@ -117,58 +166,55 @@ seL4_Error tsldr_populate_allowed(trusted_loader_t *loader)
         const AccessRightEntry *entry = &rights->entries[i];
         switch (entry->type) {
             case ACCESS_TYPE_CHANNEL:
-                if (entry->data < MICROKIT_MAX_CHANNELS && channels[entry->data]) {
+                if (entry->data < MICROKIT_MAX_CHANNELS && find_channel_by_index(loader, entry->data)) {
                     loader->allowed_channels[entry->data] = true;
-                    microkit_dbg_printf(PROGNAME "Allowed channel ID: %d\n", (unsigned long long)entry->data);
+                    microkit_dbg_printf(LIB_NAME_MACRO "Allowed channel ID: %d\n", (unsigned long long)entry->data);
                 } else {
-                    microkit_dbg_printf(PROGNAME "Invalid channel ID: %d\n", (unsigned long long)entry->data);
+                    microkit_dbg_printf(LIB_NAME_MACRO "Invalid channel ID: %d\n", (unsigned long long)entry->data);
                     return seL4_InvalidArgument;
                 }
                 break;
 
             case ACCESS_TYPE_IRQ:
-                if (entry->data < MICROKIT_MAX_CHANNELS && irqs[entry->data]) {
+                if (entry->data < MICROKIT_MAX_CHANNELS && find_irq_by_index(loader, entry->data)) {
                     loader->allowed_irqs[entry->data] = true;
-                    microkit_dbg_printf(PROGNAME "Allowed IRQ ID: %d\n", (unsigned long long)entry->data);
+                    microkit_dbg_printf(LIB_NAME_MACRO "Allowed IRQ ID: %d\n", (unsigned long long)entry->data);
                 } else {
-                    microkit_dbg_printf(PROGNAME "Invalid IRQ ID: %d\n", (unsigned long long)entry->data);
+                    microkit_dbg_printf(LIB_NAME_MACRO "Invalid IRQ ID: %d\n", (unsigned long long)entry->data);
                     return seL4_InvalidArgument;
                 }
                 break;
 
             case ACCESS_TYPE_MEMORY:
-            /*
-                if (loader->num_allowed_mappings < MAX_MAPPINGS) {
+                if (loader->num_allowed_mappings < MICROKIT_MAX_CHANNELS) {
                     seL4_Word vaddr = entry->data;
-                    MemoryMapping *mapping = find_mapping_by_vaddr(vaddr);
+                    MemoryMapping *mapping = find_mapping_by_vaddr(loader, vaddr);
                     if (mapping != NULL) {
-                        allowed_mappings[loader->num_allowed_mappings++] = *mapping;
-                        microkit_dbg_printf(PROGNAME "Allowed memory vaddr: 0x%x\n", (unsigned long long)vaddr);
+                        loader->allowed_mappings[loader->num_allowed_mappings++] = *mapping;
+                        microkit_dbg_printf(LIB_NAME_MACRO "Allowed memory vaddr: 0x%x\n", (unsigned long long)vaddr);
                     } else {
-                        microkit_dbg_printf(PROGNAME "Mapping not found for vaddr: 0x%x\n", (unsigned long long)vaddr);
+                        microkit_dbg_printf(LIB_NAME_MACRO "Mapping not found for vaddr: 0x%x\n", (unsigned long long)vaddr);
                         return seL4_InvalidArgument;
                     }
                 } else {
-                    microkit_dbg_printf(PROGNAME "Number of allowed mappings exceeded\n");
+                    microkit_dbg_printf(LIB_NAME_MACRO "Number of allowed mappings exceeded\n");
                     return seL4_InvalidArgument;
                 }
-            */
                 break;
 
             default:
-                microkit_dbg_printf(PROGNAME "Unknown access type: %d\n", (unsigned int)entry->type);
+                microkit_dbg_printf(LIB_NAME_MACRO "Unknown access type: %d\n", (unsigned int)entry->type);
                 return seL4_InvalidArgument;
         }
     }
 
     return seL4_NoError;
 }
-#endif
 
 void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_val, size_t hash_len, size_t signature_len)
 {
     if (!loader) {
-        microkit_dbg_puts("[trusred loader]: try to init null loader\n");
+        microkit_dbg_puts(LIB_NAME_MACRO "Try to init null loader\n");
         return;
     }
     loader->verify_func = fn;

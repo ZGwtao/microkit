@@ -147,6 +147,12 @@ void init(void)
         microkit_internal_crash(-1);
     }
     microkit_dbg_printf(PROGNAME "Finished up access rights integrity checking\n");
+
+    /* (really) populate allowed access rights */
+    error = tsldr_populate_allowed(&loader);
+    if (error != seL4_NoError) {
+        microkit_internal_crash(-1);
+    }
     
     load_elf((void *)ehdr->e_entry, ehdr);
     microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
