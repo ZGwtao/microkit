@@ -76,7 +76,7 @@ seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *
         microkit_dbg_printf("%x", data[i]);
     }
     microkit_dbg_printf("\n");
-#if 0
+
     // Perform signature verification
     int valid_signature = loader->verify_func(signature, data, data_size, loader->public_key);
 
@@ -86,7 +86,7 @@ seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *
     }
 
     microkit_dbg_printf(LIB_NAME_MACRO "ed25519_verify succeeded. Signature is valid.\n");
-#endif
+
     const unsigned char *access_rights_table = data + loader->hash_len + NUM_ENTRIES_SIZE;
 
     // Parse each access right entry
