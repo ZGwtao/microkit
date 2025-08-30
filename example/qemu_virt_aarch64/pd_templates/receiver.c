@@ -154,7 +154,8 @@ void init(void)
 
     tsldr_remove_caps(&loader);
 
-    
+    tsldr_loading_epilogue();
+
     load_elf((void *)ehdr->e_entry, ehdr);
     microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
 

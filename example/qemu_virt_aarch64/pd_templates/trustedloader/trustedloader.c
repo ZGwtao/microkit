@@ -322,3 +322,25 @@ void tsldr_remove_caps(trusted_loader_t *loader)
     }
     microkit_dbg_printf(LIB_NAME_MACRO "Move target VSpace to background CNode for backup\n");
 }
+
+
+seL4_Error tsldr_loading_epilogue()
+{
+    seL4_Error error;
+
+    error = seL4_CNode_Delete(CNODE_SELF_CAP, CNODE_BACKGROUND_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Unable to remove cap of background CNode during epilogue\n");
+        return error;
+    }
+
+    /* self-unauthorising */
+    error = seL4_CNode_Delete(CNODE_SELF_CAP, CNODE_SELF_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Unable to remove cap of current CNode during epilogue\n");
+        return error;
+    }
+
+    return seL4_NoError;
+}
+
