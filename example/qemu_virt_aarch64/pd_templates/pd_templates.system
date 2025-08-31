@@ -16,7 +16,7 @@
     <memory_region name="trusted_loader1_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="trusted_loader2_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="client_payload_shared" size="0x800_000" page_size="0x200_000" />
-    <memory_region name="trusted_loader_md" size="0x800_000" page_size="0x1000" />
+    <memory_region name="trusted_loader_md" size="0x1000" page_size="0x1000" />
 
     <protection_domain_template name="trusted_loader1" priority="254">
         <program_image path="trusted_loader.elf" />
