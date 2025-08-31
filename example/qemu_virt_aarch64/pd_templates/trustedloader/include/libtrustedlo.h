@@ -160,8 +160,8 @@ void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_va
 void tsldr_remove_caps(trusted_loader_t *loader);
 
 
-
-seL4_Error tsldr_loading_epilogue();
+// FIXME: this function refresh the regions where the client elf should live
+seL4_Error tsldr_loading_epilogue(uintptr_t client_exec, uintptr_t client_stack);
 
 
 

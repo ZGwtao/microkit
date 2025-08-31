@@ -324,8 +324,10 @@ void tsldr_remove_caps(trusted_loader_t *loader)
 }
 
 
-seL4_Error tsldr_loading_epilogue()
+seL4_Error tsldr_loading_epilogue(uintptr_t client_exec, uintptr_t client_stack)
 {
+    microkit_dbg_printf(LIB_NAME_MACRO "Entry of trusted loader epilogue\n");
+
     seL4_Error error;
 
     error = seL4_CNode_Delete(CNODE_SELF_CAP, CNODE_BACKGROUND_CAP, PD_CAP_BITS);
@@ -340,7 +342,15 @@ seL4_Error tsldr_loading_epilogue()
         microkit_dbg_printf(LIB_NAME_MACRO "Unable to remove cap of current CNode during epilogue\n");
         return error;
     }
+    microkit_dbg_printf(LIB_NAME_MACRO "Clean up access to the CNode for template PD\n");
 
+    // FIXME: currently the size of exec section is fixed
+    custom_memset((void *)client_exec, 0, 0x1000);
+
+    // TODO: refresh the client stack...
+    // -> the client should use a different stack with the trusted loader
+
+    microkit_dbg_printf(LIB_NAME_MACRO "Exit of trusted loader epilogue\n");
     return seL4_NoError;
 }
 

@@ -21,6 +21,9 @@
 uintptr_t tsldr_metadata = 0x4000000;
 static uintptr_t client_elf = 0xA000000;
 
+/* should be refreshed each time we restart */
+uintptr_t client_exec_section = 0xB000000;
+
 typedef void (*entry_fn_t)(void);
 
 trusted_loader_t loader;
@@ -122,7 +125,7 @@ void init(void)
 
     tsldr_remove_caps(&loader);
 
-    tsldr_loading_epilogue();
+    tsldr_loading_epilogue(client_exec_section, (uintptr_t)0x0);
 
     load_elf((void *)ehdr->e_entry, ehdr);
     microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
