@@ -7,7 +7,7 @@
 #include <stdint.h>
 #include <microkit.h>
 
-#define PROGNAME "[receiver_loader] "
+#define PROGNAME "{ frontend } "
 
 uintptr_t shared1;
 uintptr_t shared2;
@@ -23,11 +23,11 @@ void init(void)
     microkit_dbg_printf(PROGNAME "Entered init\n");
 
     custom_memcpy((void *)shared1, _proto_container, _proto_container_end - _proto_container);
-    microkit_dbg_printf(PROGNAME "Wrote receiver's ELF file into memory\n");
+    microkit_dbg_printf(PROGNAME "Wrote proto-container's ELF file into memory\n");
     custom_memcpy((void *)shared2, _client, _client_end - _client);
     microkit_dbg_printf(PROGNAME "Wrote client's ELF file into memory\n");
 
-    microkit_dbg_printf(PROGNAME "Making ppc to receiver's trusted loader\n");
+    microkit_dbg_printf(PROGNAME "Making ppc to container monitor backend\n");
 
     microkit_msginfo info;
     seL4_Error error;
