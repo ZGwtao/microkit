@@ -279,7 +279,22 @@ seL4_MessageInfo_t monitor_call_restart(void)
 
     /* set a flag for the trusted loader to check whether to boot or to restart... */
     microkit_dbg_printf(PROGNAME "Restart template PD without reloading trusted loader\n");
-    microkit_pd_restart(CHILD_ID, ehdr->e_entry);
+    //microkit_pd_restart(CHILD_ID, ehdr->e_entry);
+    seL4_UserContext ctxt = {0};
+    ctxt.pc = ehdr->e_entry;
+    ctxt.sp = 0x10000000000;
+    error = seL4_TCB_WriteRegisters(
+              BASE_TCB_CAP + CHILD_ID,
+              seL4_True,
+              0, /* No flags */
+              1, /* writing 1 register */
+              &ctxt
+          );
+
+    if (error != seL4_NoError) {
+        microkit_dbg_puts("microkit_pd_restart: error writing TCB registers\n");
+        microkit_internal_crash(error);
+    }
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
 
     return microkit_msginfo_new(seL4_NoError, 0);

@@ -420,6 +420,7 @@ void tsldr_restore_caps(trusted_loader_t *loader)
             microkit_dbg_printf(LIB_NAME_MACRO "Failed to unmap mapping: vaddr=0x%x error=%d\n", mapping->vaddr, error);
             microkit_internal_crash(error);
         }
+        microkit_dbg_printf(LIB_NAME_MACRO "Map succeed\n");
 
         /* backing up the mapped page */
         error = seL4_CNode_Move(

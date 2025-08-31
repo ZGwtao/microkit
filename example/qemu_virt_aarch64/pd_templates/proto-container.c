@@ -128,7 +128,26 @@ void init(void)
 
     microkit_dbg_printf(PROGNAME "Switch to the client's code to execute\n");
     entry_fn_t entry_fn = (entry_fn_t) ehdr->e_entry;
-    entry_fn();
+    custom_memset((void *)0x80000000, 0, sizeof(0x1000));
+
+    asm volatile (
+        "mov x0, xzr\n\t"
+        "mov x1, xzr\n\t"
+        "mov x2, xzr\n\t"
+        "mov x3, xzr\n\t"
+        "mov x4, xzr\n\t"
+        "mov x5, xzr\n\t"
+        "mov x6, xzr\n\t"
+        "mov x7, xzr\n\t"
+
+        "mov sp, %[stack_top]\n\t"  /* set new SP */
+        "br  %[target]\n\t"         /* jump to function */
+        :
+        : [stack_top] "r" (0x80000000 + 0x1000),
+          [target] "r"   (entry_fn)
+        : "x0","x1","x2","x3","x4","x5","x6","x7","x30","memory"
+    );
+    __builtin_unreachable();
 }
 
 void notified(microkit_channel ch)
