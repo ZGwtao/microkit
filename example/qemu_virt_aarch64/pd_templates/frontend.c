@@ -18,12 +18,16 @@ extern char _proto_container_end[];
 extern char _client[];
 extern char _client_end[];
 
+extern char _test[];
+extern char _test_end[];
+
 void init(void)
 {
     microkit_dbg_printf(PROGNAME "Entered init\n");
 
     custom_memcpy((void *)shared1, _proto_container, _proto_container_end - _proto_container);
     microkit_dbg_printf(PROGNAME "Wrote proto-container's ELF file into memory\n");
+
     custom_memcpy((void *)shared2, _client, _client_end - _client);
     microkit_dbg_printf(PROGNAME "Wrote client's ELF file into memory\n");
 
@@ -38,6 +42,9 @@ void init(void)
     if (error != seL4_NoError) {
         microkit_internal_crash(error);
     }
+
+    custom_memcpy((void *)shared2, _test, _test_end - _test);
+    microkit_dbg_printf(PROGNAME "Wrote client's ELF file into memory\n");
 
     microkit_mr_set(0, 2);
     info = microkit_ppcall(1, microkit_msginfo_new(0, 1));

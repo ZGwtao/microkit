@@ -43,3 +43,11 @@ _client:
 .incbin CLIENT_PATH
 _client_end:
 #endif
+
+#if defined(TEST_PATH)
+.section .test, "aw", @progbits
+.global _test, _test_end
+_test:
+.incbin TEST_PATH
+_test_end:
+#endif

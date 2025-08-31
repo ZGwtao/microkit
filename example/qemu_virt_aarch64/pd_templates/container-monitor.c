@@ -272,6 +272,9 @@ seL4_MessageInfo_t monitor_call_restart(void)
         return microkit_msginfo_new(error, 0);
     }
 
+    custom_memcpy((void*)client_program, (char *)shared2, 0x800000);
+    microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
+
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
     /* set a flag for the trusted loader to check whether to boot or to restart... */

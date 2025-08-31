@@ -10,7 +10,7 @@ BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
-SYSTEM_HASH	?= 0x12d10f0085d5d97b
+SYSTEM_HASH	?= 0x961a3b3b5f97c1d6
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
@@ -36,6 +36,7 @@ TRUSTED_LOADER_OBJS := trusted_loader.o
 PROTO_CONTAINER_OBJS := proto-container.o
 RECEIVER2_OBJS := receiver2.o
 CLIENT_OBJS	:= client.o
+TEST_OBJS	:= test.o
 SENDER_LOADER_OBJS := sender_loader.o
 FRONTEND_OBJS := frontend.o
 
@@ -48,12 +49,14 @@ BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 PATCHED_PROTO_CONTAINER_ELF := $(BUILD_DIR)/proto-container_patched.elf
 PATCHED_RECEIVER2_ELF := $(BUILD_DIR)/receiver2_patched.elf
 PATCHED_CLIENT_ELF := $(BUILD_DIR)/client_patched.elf
+PATCHED_TEST_ELF := $(BUILD_DIR)/test_patched.elf
 
 CLIENT_ELF := $(BUILD_DIR)/client.elf
+TEST_ELF := $(BUILD_DIR)/test.elf
 
 # Images to include patched ELF files
 IMAGES := $(BUILD_DIR)/trusted_loader.elf $(BUILD_DIR)/container-monitor.elf \
-			$(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) \
+			$(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) $(TEST_ELF) \
 			$(BUILD_DIR)/frontend.elf $(BUILD_DIR)/sender_loader.elf
 
 # Private key file
@@ -109,6 +112,9 @@ $(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf $(PRIVATE_KEY_FILE)
 $(PATCHED_CLIENT_ELF): $(CLIENT_ELF) $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
+$(PATCHED_TEST_ELF): $(TEST_ELF) $(PRIVATE_KEY_FILE)
+	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
+
 # Link container-monitor.elf
 $(BUILD_DIR)/container-monitor.elf: $(BUILD_DIR)/$(MONITOR_OBJS) \
                                  ${LIBEXTELF} ${LIBCRYPTO} \
@@ -130,11 +136,12 @@ $(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link programs.o with patched ELF dependencies
-$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF)
+$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF) $(PATCHED_TEST_ELF)
 	$(CC) -c -g3 -x assembler-with-cpp \
 		-DPROTO_CONTAINER_PATH=\"$(PATCHED_PROTO_CONTAINER_ELF)\" \
 		-DRECEIVER2_PATH=\"$(PATCHED_RECEIVER2_ELF)\" \
 		-DCLIENT_PATH=\"$(PATCHED_CLIENT_ELF)\" \
+		-DTEST_PATH=\"$(PATCHED_TEST_ELF)\" \
 		package_programs.S -o $@
 
 # Link proto-container.elf
@@ -148,6 +155,9 @@ $(BUILD_DIR)/receiver2.elf: $(BUILD_DIR)/$(RECEIVER2_OBJS) \
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(CLIENT_ELF): $(BUILD_DIR)/$(CLIENT_OBJS)
+	$(LD) $(LDFLAGS) -Ttext=0xB000000 $^ $(LIBS) -o $@
+
+$(TEST_ELF): $(BUILD_DIR)/$(TEST_OBJS)
 	$(LD) $(LDFLAGS) -Ttext=0xB000000 $^ $(LIBS) -o $@
 
 # Generate final image and report
