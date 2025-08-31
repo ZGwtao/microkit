@@ -10,7 +10,7 @@ BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
-SYSTEM_HASH	?= 0x12fe22638f1bcbbe
+SYSTEM_HASH	?= 0x12d10f0085d5d97b
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
@@ -31,6 +31,7 @@ include $(LIBEXTELF_SRC_DIR)/Makefile
 include $(LIBTSLDR_SRC_DIR)/Makefile
 
 # Object files
+MONITOR_OBJS := container-monitor.o
 TRUSTED_LOADER_OBJS := trusted_loader.o
 PROTO_CONTAINER_OBJS := proto-container.o
 RECEIVER2_OBJS := receiver2.o
@@ -51,7 +52,7 @@ PATCHED_CLIENT_ELF := $(BUILD_DIR)/client_patched.elf
 CLIENT_ELF := $(BUILD_DIR)/client.elf
 
 # Images to include patched ELF files
-IMAGES := $(BUILD_DIR)/trusted_loader.elf \
+IMAGES := $(BUILD_DIR)/trusted_loader.elf $(BUILD_DIR)/container-monitor.elf \
 			$(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) \
 			$(BUILD_DIR)/frontend.elf $(BUILD_DIR)/sender_loader.elf
 
@@ -107,6 +108,12 @@ $(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf $(PRIVATE_KEY_FILE)
 
 $(PATCHED_CLIENT_ELF): $(CLIENT_ELF) $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
+
+# Link container-monitor.elf
+$(BUILD_DIR)/container-monitor.elf: $(BUILD_DIR)/$(MONITOR_OBJS) \
+                                 ${LIBEXTELF} ${LIBCRYPTO} \
+                                 $(PACKAGE_PROGS_OBJS)
+	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link trusted_loader.elf
 $(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \

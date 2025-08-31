@@ -13,16 +13,16 @@
 
     <memory_region name="client_test" size="0x800_000" page_size="0x200_000" />
 
-    <memory_region name="trusted_loader1_shared" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="container_monitor_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="trusted_loader2_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="client_payload_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="trusted_loader_md" size="0x1000" page_size="0x1000" />
 
-    <protection_domain_template name="trusted_loader1" priority="254">
-        <program_image path="trusted_loader.elf" />
+    <protection_domain_template name="container_monitor" priority="254">
+        <program_image path="container-monitor.elf" />
         <map mr="receiver_program" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="user_program" />
         <map mr="client_program" vaddr="0xA00000000" perms="rw" cached="true" setvar_vaddr="client_program" />
-        <map mr="trusted_loader1_shared" vaddr="0x6000000" perms="rw" cached="true" setvar_vaddr="shared1" />
+        <map mr="container_monitor_shared" vaddr="0x6000000" perms="rw" cached="true" setvar_vaddr="shared1" />
         <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
         <map mr="trusted_loader_md" vaddr="0x1000000" perms="rw" cached="true" setvar_vaddr="tsldr_metadata" />
 
@@ -41,7 +41,7 @@
     <!-- container monitor frontend PD (for demoing) -->
     <protection_domain name="frontend" priority="250">
         <program_image path="frontend.elf" />
-        <map mr="trusted_loader1_shared" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="shared1" />
+        <map mr="container_monitor_shared" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="shared1" />
         <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
     </protection_domain>
 
@@ -71,7 +71,7 @@
 
     <channel>
         <end pd="frontend" id="1" pp="true" />
-        <end pd="trusted_loader1" id="2" />
+        <end pd="container_monitor" id="2" />
     </channel>
 
     <channel>
