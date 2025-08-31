@@ -123,6 +123,16 @@ void init(void)
 
     tsldr_loading_epilogue(client_exec_section, (uintptr_t)0x0);
 
+    /* switch to a trampoline stack... */
+    asm volatile (
+        "mov sp, %0\n\t"   /* set SP to new stack top */
+        :
+        : "r" (0x40000000 + 0x1000)
+        : "memory"
+    );
+    /* say goodbye to the old stack */
+    custom_memset((void *)(0x10000000000 - 0x1000), 0, 0x1000);
+
     load_elf((void *)ehdr->e_entry, ehdr);
     microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
 

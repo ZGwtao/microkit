@@ -15,6 +15,7 @@
     <memory_region name="test_test" size="0x1000" page_size="0x1000" />
 
     <memory_region name="container_stack" size="0x1000" page_size="0x1000" />
+    <memory_region name="trampoline_stack" size="0x1000" page_size="0x1000" />
 
     <memory_region name="container_monitor_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="trusted_loader2_shared" size="0x800_000" page_size="0x200_000" />
@@ -38,6 +39,7 @@
             <map mr="client_test" vaddr="0xC000000" perms="rwx" cached="true" optional="true" />
             <map mr="test_test" vaddr="0xD000000" perms="rwx" cached="true" optional="true" />
             <map mr="container_stack" vaddr="0x80000000" perms="rw" cached="true" />
+            <map mr="trampoline_stack" vaddr="0x40000000" perms="rw" cached="true" />
             <map mr="trusted_loader_md" vaddr="0x4000000" perms="r" cached="true" />
             <irq irq="0" id="5" optional="true" />
         </protection_domain>
