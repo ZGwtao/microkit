@@ -26,8 +26,8 @@
         <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
         <map mr="trusted_loader_md" vaddr="0x1000000" perms="rw" cached="true" setvar_vaddr="tsldr_metadata" />
 
-        <protection_domain name="receiver" id="1" priority="253">
-            <!-- <program_image path="receiver.elf" /> -->
+        <protection_domain name="proto-container" id="1" priority="253">
+            <!-- <program_image path="proto-container.elf" /> -->
             <!-- remember to set execute perms for this mapping -->
             <map mr="receiver_program" vaddr="0x200000" perms="rwx" cached="true" />
             <map mr="client_program" vaddr="0xA000000" perms="rw" cached="true" optional="true" />
@@ -65,7 +65,7 @@
 
     <channel optional="true">
         <end pd="sender" id="1" />
-        <end pd="receiver" id="2" />
+        <end pd="proto-container" id="2" />
     </channel>
 
     <channel>

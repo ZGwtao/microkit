@@ -20,19 +20,19 @@
  *
  */
 
-#if defined(RECEIVER_PATH)
-.section .receiver, "aw", @progbits
-.global _receiver, _receiver_end
-_receiver:
-.incbin RECEIVER_PATH
-_receiver_end:
+#if defined(PROTO_CONTAINER_PATH)
+.section .proto_container, "aw", @progbits
+.global _proto_container, _proto_container_end
+_proto_container:
+.incbin PROTO_CONTAINER_PATH
+_proto_container_end:
 #endif
 
-#if defined(RECEIVER2_PATH)
+#if defined(proto_container2_PATH)
 .section ._sender, "aw", @progbits
 .global _sender, _sender_end
 _sender:
-.incbin RECEIVER2_PATH
+.incbin proto_container2_PATH
 _sender_end:
 #endif
 

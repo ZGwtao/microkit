@@ -10,7 +10,7 @@ BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
-SYSTEM_HASH	?= 0x16876f73aa877b72
+SYSTEM_HASH	?= 0x57e879863a1bb49f
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
@@ -32,7 +32,7 @@ include $(LIBTSLDR_SRC_DIR)/Makefile
 
 # Object files
 TRUSTED_LOADER_OBJS := trusted_loader.o
-RECEIVER_OBJS := receiver.o
+PROTO_CONTAINER_OBJS := proto-container.o
 RECEIVER2_OBJS := receiver2.o
 CLIENT_OBJS	:= client.o
 SENDER_LOADER_OBJS := sender_loader.o
@@ -44,7 +44,7 @@ PACKAGE_PROGS_OBJS := $(BUILD_DIR)/programs.o
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 
 # Patched ELF file names
-PATCHED_RECEIVER_ELF := $(BUILD_DIR)/receiver_patched.elf
+PATCHED_PROTO_CONTAINER_ELF := $(BUILD_DIR)/proto-container_patched.elf
 PATCHED_RECEIVER2_ELF := $(BUILD_DIR)/receiver2_patched.elf
 PATCHED_CLIENT_ELF := $(BUILD_DIR)/client_patched.elf
 
@@ -52,7 +52,7 @@ CLIENT_ELF := $(BUILD_DIR)/client.elf
 
 # Images to include patched ELF files
 IMAGES := $(BUILD_DIR)/trusted_loader.elf \
-			$(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) \
+			$(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) \
 			$(BUILD_DIR)/receiver_loader.elf $(BUILD_DIR)/sender_loader.elf
 
 # Private key file
@@ -99,7 +99,7 @@ $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g -mcpu=$(CPU) $< -o $@
 
 # Generate patched ELF files
-$(PATCHED_RECEIVER_ELF): $(BUILD_DIR)/receiver.elf $(PRIVATE_KEY_FILE)
+$(PATCHED_PROTO_CONTAINER_ELF): $(BUILD_DIR)/proto-container.elf $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
 $(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf $(PRIVATE_KEY_FILE)
@@ -123,15 +123,15 @@ $(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link programs.o with patched ELF dependencies
-$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_RECEIVER_ELF) $(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF)
+$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF)
 	$(CC) -c -g3 -x assembler-with-cpp \
-		-DRECEIVER_PATH=\"$(PATCHED_RECEIVER_ELF)\" \
+		-DPROTO_CONTAINER_PATH=\"$(PATCHED_PROTO_CONTAINER_ELF)\" \
 		-DRECEIVER2_PATH=\"$(PATCHED_RECEIVER2_ELF)\" \
 		-DCLIENT_PATH=\"$(PATCHED_CLIENT_ELF)\" \
 		package_programs.S -o $@
 
-# Link receiver.elf
-$(BUILD_DIR)/receiver.elf: $(BUILD_DIR)/$(RECEIVER_OBJS) \
+# Link proto-container.elf
+$(BUILD_DIR)/proto-container.elf: $(BUILD_DIR)/$(PROTO_CONTAINER_OBJS) \
                             ${LIBEXTELF} $(LIBCRYPTO) $(LIBTSLDR)
 	$(LD) $(LDFLAGS) --defsym __sel4_ipc_buffer=0x100000 $^ $(LIBS) -o $@
 

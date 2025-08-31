@@ -11,11 +11,7 @@
 #include <ed25519.h>
 #include <libtrustedlo.h>
 
-#define PROGNAME "[receiver] "
-
-#define NOTIFICATION_BASE_CAP   10
-
-#define PROG_TCB    (10+64+64+64)
+#define PROGNAME "[proto-container] "
 
 /* 4KB in size, read-only */
 uintptr_t tsldr_metadata = 0x4000000;
