@@ -111,7 +111,9 @@ typedef struct {
     /* restart flag for capabilities */
     bool removed_caps;
 
-    bool bootstrap;
+    bool flag_bootstrap;
+
+    bool flag_restore_caps;
 
     /* crypto */
     bool init;
@@ -155,6 +157,9 @@ seL4_Error tsldr_populate_allowed(trusted_loader_t *loader);
  * @param signature_len Length of the access right table signature
  */
 void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_val, size_t hash_len, size_t signature_len);
+
+
+void tsldr_restore_caps(trusted_loader_t *loader);
 
 
 void tsldr_remove_caps(trusted_loader_t *loader);

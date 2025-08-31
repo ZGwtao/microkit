@@ -115,13 +115,13 @@ void init(void)
     }
     microkit_dbg_printf(PROGNAME "Finished up access rights integrity checking\n");
 
+    tsldr_restore_caps(&loader);
 
     /* (really) populate allowed access rights */
     error = tsldr_populate_allowed(&loader);
     if (error != seL4_NoError) {
         microkit_internal_crash(-1);
     }
-
 
     tsldr_remove_caps(&loader);
 
