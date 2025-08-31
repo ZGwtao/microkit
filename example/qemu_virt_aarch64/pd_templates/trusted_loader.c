@@ -243,6 +243,12 @@ seL4_MessageInfo_t monitor_call_debute(void)
 
 seL4_MessageInfo_t monitor_call_restart(void)
 {
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
+
+    /* set a flag for the trusted loader to check whether to boot or to restart... */
+    microkit_dbg_printf(PROGNAME "Restart template PD without reloading trusted loader\n");
+    microkit_pd_restart(CHILD_ID, ehdr->e_entry);
+    microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
 
     return microkit_msginfo_new(seL4_NoError, 0);
 }

@@ -344,3 +344,21 @@ seL4_Error tsldr_loading_epilogue()
     return seL4_NoError;
 }
 
+
+seL4_Error tsldr_loading_prologue(trusted_loader_t *loader)
+{
+    microkit_dbg_printf(LIB_NAME_MACRO "trusted loader init prologue\n");
+
+    if (!loader->bootstrap) {
+        /* set flag to prevent re-initialisation */
+        loader->bootstrap = true;
+        microkit_dbg_printf(LIB_NAME_MACRO "Bootstrap trusted loader\n");
+
+    } else {
+        microkit_dbg_printf(LIB_NAME_MACRO "Restart trusted loader\n");
+
+
+    }
+
+    return seL4_NoError;
+}

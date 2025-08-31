@@ -111,6 +111,8 @@ typedef struct {
     /* restart flag for capabilities */
     bool removed_caps;
 
+    bool bootstrap;
+
     /* crypto */
     bool init;
 
@@ -160,3 +162,7 @@ void tsldr_remove_caps(trusted_loader_t *loader);
 
 
 seL4_Error tsldr_loading_epilogue();
+
+
+
+seL4_Error tsldr_loading_prologue(trusted_loader_t *loader);
