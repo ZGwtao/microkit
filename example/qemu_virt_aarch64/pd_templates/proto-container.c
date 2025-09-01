@@ -57,21 +57,6 @@ static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
     microkit_dbg_printf(PROGNAME "Loaded ELF segments into memory\n");
 }
 
-__attribute__((noreturn))
-static inline void
-jump_to_stack(void *stack_top, entry_fn_t func)
-{
-    asm volatile (
-        "mov sp, %[new_stack]\n\t" /* set new SP */
-        "br  %[func]\n\t"          /* branch directly, never return */
-        :
-        : [new_stack] "r" (stack_top),
-          [func] "r" (func)
-        : "x30", "memory"
-    );
-    __builtin_unreachable();
-}
-
 void init(void)
 {
     __sel4_ipc_buffer = (seL4_IPCBuffer *)0x100000;
@@ -162,23 +147,21 @@ void init(void)
     load_elf((void *)trampoline_ehdr->e_entry, trampoline_ehdr);
     microkit_dbg_printf(PROGNAME "Load trampoline elf to the targeting memory region\n");
 
-#if 0
-    /* switch to a trampoline stack... */
-    asm volatile (
-        "mov sp, %0\n\t"   /* set SP to new stack top */
-        :
-        : "r" (trampoline_stack_top)
-        : "memory"
-    );
-    /* say goodbye to the old stack */
-    custom_memset((void *)tsldr_stack_bottom, 0, STACKS_SIZE);
-#endif
     /* -- now we are ready to jump to the trampoline -- */
 
     microkit_dbg_printf(PROGNAME "Switch to the trampoline's code to execute\n");
     entry_fn_t entry_fn = (entry_fn_t) trampoline_ehdr->e_entry;
 
-    jump_to_stack((void *)trampoline_stack_top, entry_fn);
+    /* jump tp trampoline */
+    asm volatile (
+        "mov sp, %[new_stack]\n\t" /* set new SP */
+        "br  %[func]\n\t"          /* branch directly, never return */
+        :
+        : [new_stack] "r" (trampoline_stack_top),
+          [func] "r" (entry_fn)
+        : "x30", "memory"
+    );
+    __builtin_unreachable();
 }
 
 void notified(microkit_channel ch)

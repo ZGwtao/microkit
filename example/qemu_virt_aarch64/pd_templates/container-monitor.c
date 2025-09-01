@@ -233,7 +233,7 @@ seL4_MessageInfo_t monitor_call_debute(void)
     removed_caps = true;
 
     load_elf((void*)user_program, ehdr);
-    microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
+    microkit_dbg_printf(PROGNAME "Copied trusted loader to child PD's memory region\n");
 
     custom_memcpy((void*)client_program, (char *)shared2, 0x800000);
     microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
@@ -278,10 +278,14 @@ seL4_MessageInfo_t monitor_call_restart(void)
         return microkit_msginfo_new(error, 0);
     }
 
+    /* reload the trusted loader to the target place */
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
+
+    load_elf((void*)user_program, ehdr);
+    microkit_dbg_printf(PROGNAME "Copied trusted loader to child PD's memory region\n");
+
     custom_memcpy((void*)client_program, (char *)shared2, 0x800000);
     microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
-
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
     /* set a flag for the trusted loader to check whether to boot or to restart... */
     microkit_dbg_printf(PROGNAME "Restart template PD without reloading trusted loader\n");
