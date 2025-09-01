@@ -17,6 +17,13 @@
 uintptr_t tsldr_metadata = 0x4000000;
 static uintptr_t client_elf = 0xA000000;
 
+#define STACKS_SIZE 0x1000
+
+uintptr_t trampoline_stack_top = (0x40000000 + STACKS_SIZE);
+uintptr_t tsldr_stack_bottom = (0x10000000000 - STACKS_SIZE);
+uintptr_t container_stack_top = (0x80000000 + STACKS_SIZE);
+uintptr_t container_stack_bottom = (0x80000000);
+
 /* should be refreshed each time we restart */
 uintptr_t client_exec_section = 0xB000000;
 
@@ -127,18 +134,18 @@ void init(void)
     asm volatile (
         "mov sp, %0\n\t"   /* set SP to new stack top */
         :
-        : "r" (0x40000000 + 0x1000)
+        : "r" (trampoline_stack_top)
         : "memory"
     );
     /* say goodbye to the old stack */
-    custom_memset((void *)(0x10000000000 - 0x1000), 0, 0x1000);
+    custom_memset((void *)tsldr_stack_bottom, 0, STACKS_SIZE);
 
     load_elf((void *)ehdr->e_entry, ehdr);
     microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
 
     microkit_dbg_printf(PROGNAME "Switch to the client's code to execute\n");
     entry_fn_t entry_fn = (entry_fn_t) ehdr->e_entry;
-    custom_memset((void *)0x80000000, 0, sizeof(0x1000));
+    custom_memset((void *)container_stack_bottom, 0, STACKS_SIZE);
 
     asm volatile (
         "mov x0, xzr\n\t"
@@ -153,7 +160,7 @@ void init(void)
         "mov sp, %[stack_top]\n\t"  /* set new SP */
         "br  %[target]\n\t"         /* jump to function */
         :
-        : [stack_top] "r" (0x80000000 + 0x1000),
+        : [stack_top] "r" (container_stack_top),
           [target] "r"   (entry_fn)
         : "x0","x1","x2","x3","x4","x5","x6","x7","x30","memory"
     );

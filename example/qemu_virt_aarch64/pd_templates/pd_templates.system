@@ -33,7 +33,7 @@
         <protection_domain name="proto-container" id="1" priority="253">
             <!-- <program_image path="proto-container.elf" /> -->
             <!-- remember to set execute perms for this mapping -->
-            <map mr="receiver_program" vaddr="0x200000" perms="rwx" cached="true" />
+            <map mr="receiver_program" vaddr="0x200000" perms="rwx" cached="true" optional="true" />
             <map mr="client_program" vaddr="0xA000000" perms="rw" cached="true" optional="true" />
             <map mr="client_exec" vaddr="0xB000000" perms="rwx" cached="true" optional="true" />
             <map mr="client_test" vaddr="0xC000000" perms="rwx" cached="true" optional="true" />
