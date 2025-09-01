@@ -14,18 +14,16 @@
 #define PROGNAME "[proto-container] "
 
 /* 4KB in size, read-only */
-uintptr_t tsldr_metadata = 0x4000000;
-static uintptr_t client_elf = 0xA000000;
-uintptr_t trampoline_elf = 0xD800000;
+uintptr_t tsldr_metadata    = 0x0A00000;
+uintptr_t trampoline_elf    = 0x1000000;
+uintptr_t container_elf     = 0x2000000;
+uintptr_t container_exec    = 0x2800000;
 
 #define STACKS_SIZE 0x1000
 
-uintptr_t trampoline_stack_top = (0x40000000 + STACKS_SIZE);
-uintptr_t tsldr_stack_bottom = (0x10000000000 - STACKS_SIZE);
-uintptr_t container_stack_top = (0x80000000 + STACKS_SIZE);
-
-/* should be refreshed each time we restart */
-uintptr_t client_exec_section = 0xB000000;
+uintptr_t trampoline_stack_top  = (0x0FFFFE00000);
+uintptr_t tsldr_stack_bottom    = (0x10000000000 - STACKS_SIZE);
+uintptr_t container_stack_top   = (0x0FFFFC00000);
 
 typedef void (*entry_fn_t)(void);
 
@@ -81,7 +79,7 @@ void init(void)
     seL4_Error error;
 
     /* start to parse client elf information */
-    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)client_elf;
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)container_elf;
     /* check elf integrity */
     if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
         microkit_dbg_printf(PROGNAME "Data in shared memory region must be an ELF file\n");
@@ -139,7 +137,7 @@ void init(void)
 
     tsldr_remove_caps(&loader);
 
-    tsldr_loading_epilogue(client_exec_section, (uintptr_t)0x0);
+    tsldr_loading_epilogue(container_exec, (uintptr_t)0x0);
 
     load_elf((void *)ehdr->e_entry, ehdr);
     microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");

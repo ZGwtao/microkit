@@ -10,7 +10,7 @@ BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
-SYSTEM_HASH	?= 0x152a6c0a61f67f4e
+SYSTEM_HASH	?= 0x5e78cb5ba5d648d2
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
@@ -161,13 +161,13 @@ $(BUILD_DIR)/receiver2.elf: $(BUILD_DIR)/$(RECEIVER2_OBJS) \
 
 $(TRAMPOLINE_ELF): $(BUILD_DIR)/$(TRAMPOLINE_OBJS) \
 					${LIBEXTELF}
-	$(LD) $(LDFLAGS) -Ttext=0xFF000000 $^ $(LIBS) -o $@
+	$(LD) $(LDFLAGS) -Ttext=0x1800000 $^ $(LIBS) -o $@
 
 $(CLIENT_ELF): $(BUILD_DIR)/$(CLIENT_OBJS)
-	$(LD) $(LDFLAGS) -Ttext=0xB000000 $^ $(LIBS) -o $@
+	$(LD) $(LDFLAGS) -Ttext=0x2800000 $^ $(LIBS) -o $@
 
 $(TEST_ELF): $(BUILD_DIR)/$(TEST_OBJS)
-	$(LD) $(LDFLAGS) -Ttext=0xB000000 $^ $(LIBS) -o $@
+	$(LD) $(LDFLAGS) -Ttext=0x2800000 $^ $(LIBS) -o $@
 
 # Generate final image and report
 $(IMAGE_FILE) $(REPORT_FILE): $(IMAGES) pd_templates.system

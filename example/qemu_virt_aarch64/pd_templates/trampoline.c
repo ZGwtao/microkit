@@ -11,9 +11,9 @@ void init(void)
 {
     uintptr_t tsldr_program = 0x200000;
     uintptr_t tsldr_stack_bottom = 0x10000000000 - 0x1000;
-    uintptr_t container_stack_bottom = 0x80000000;
-    uintptr_t container_stack_top = 0x80001000;
-    uintptr_t client_elf = 0xA000000;
+    uintptr_t container_stack_bottom = 0x0FFFFBFF000;
+    uintptr_t container_stack_top = 0x0FFFFC00000;
+    uintptr_t client_elf = 0x2000000;
 
     microkit_dbg_puts(" >tpl< Entry of trampoline\n");
 
