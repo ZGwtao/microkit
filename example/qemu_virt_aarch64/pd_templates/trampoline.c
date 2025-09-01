@@ -9,7 +9,8 @@ typedef void (*entry_fn_t)(void);
 
 void init(void)
 {
-    uintptr_t tsldr_program = 0x200000;
+    uintptr_t tsldr_metadata    = 0xA00000;
+    uintptr_t tsldr_program     = 0x200000;
     uintptr_t tsldr_stack_bottom = 0x10000000000 - 0x1000;
     uintptr_t container_stack_bottom = 0x0FFFFBFF000;
     uintptr_t container_stack_top = 0x0FFFFC00000;
@@ -19,6 +20,9 @@ void init(void)
 
     /* say goodbye to the old stack */
     custom_memset((void *)tsldr_stack_bottom, 0, 0x1000);
+
+    /* clean up trusted loader metadata... */
+    custom_memset((void *)tsldr_metadata, 0, 0x1000);
 
     /* clean up trusted loader... */
     custom_memset((void *)tsldr_program, 0, 0x800000);

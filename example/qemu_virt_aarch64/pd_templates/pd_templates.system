@@ -47,7 +47,7 @@
 
             <!-- trusted loader executes here, stack lives in the top -->
             <map mr="trusted_loader_exec"   vaddr="0x200000" perms="rwx" cached="true" />
-            <map mr="trusted_loader_md"     vaddr="0xA00000" perms="r" cached="true" />
+            <map mr="trusted_loader_md"     vaddr="0xA00000" perms="rw" cached="true" />
 
             <!-- mappings for trampoline -->
             <map mr="trampoline_exec"   vaddr="0x1800000" perms="rwx" cached="true" />

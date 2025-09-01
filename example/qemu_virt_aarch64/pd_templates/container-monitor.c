@@ -125,6 +125,20 @@ static void restore_caps();
 seL4_MessageInfo_t monitor_call_debute(void);
 seL4_MessageInfo_t monitor_call_restart(void);
 
+static void tsldr_init_metadata(void)
+{
+    /* initialise trusted loader metadata */
+    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+    custom_memset((void *)md, 0, sizeof(tsldr_md_t));
+
+    md->system_hash = system_hash;
+    custom_memcpy(md->public_key, public_key, sizeof(md->public_key));
+    custom_memcpy(md->channels,   channels,   sizeof(md->channels));
+    custom_memcpy(md->irqs,       irqs,       sizeof(md->irqs));
+    custom_memcpy(md->mappings,   mappings,   sizeof(md->mappings));
+    md->init = true;
+}
+
 void init(void)
 {
     microkit_dbg_printf(PROGNAME "Entered init\n");
@@ -195,21 +209,11 @@ seL4_MessageInfo_t monitor_call_debute(void)
         return microkit_msginfo_new(seL4_InvalidArgument, 0);
     }
 
-    seL4_Error error;
-
-    /* initialise trusted loader metadata */
-    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
-    if (!md->init) {
-        md->system_hash = system_hash;
-        custom_memcpy(md->public_key, public_key, sizeof(md->public_key));
-        custom_memcpy(md->channels,   channels,   sizeof(md->channels));
-        custom_memcpy(md->irqs,       irqs,       sizeof(md->irqs));
-        custom_memcpy(md->mappings,   mappings,   sizeof(md->mappings));
-        md->init = true;
-    }
+    /* init metadata for proto-container's tsldr */
+    tsldr_init_metadata();
 
     // Verify the signature (only the relevant part of the section)
-    error = populate_rights(
+    seL4_Error error = populate_rights(
         &access_rights,                   // Pointer to AccessRights structure
         (unsigned char*)section,          // Pointer to signature || data
         section_size                      // Length of signed message
@@ -249,6 +253,9 @@ seL4_MessageInfo_t monitor_call_debute(void)
 
 seL4_MessageInfo_t monitor_call_restart(void)
 {
+    /* init metadata for proto-container's tsldr */
+    tsldr_init_metadata();
+
     /* bring back cap to background CNode and template PD CNode */
     seL4_Error error = seL4_CNode_Copy(
         CHILD_CSPACE_CAP,
