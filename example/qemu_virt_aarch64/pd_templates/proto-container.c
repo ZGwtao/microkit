@@ -31,16 +31,16 @@
  * |                                   |
  * +-----------------------------------+ <- 0x02800000 <= (entry of container client)
  * |                                   |    |
- * |        Container ELF Payload      |  size = 0x800000
+ * |        Container ELF Payload      |  size = 8M
  * |                                   |    |
  * +-----------------------------------+ <- 0x02000000
- * |                                   |
- * |        Trampoline Segments        |                size = 0x800000
- * |                                   |
+ * |                                   |    |
+ * |        Trampoline Segments        |  size = 8M
+ * |                                   |    |
  * +-----------------------------------+ <- 0x01800000 <= (entry of trampoline)
- * |                                   |
- * |        Trampoline ELF Payload     |                size = 0x800000
- * |                                   |
+ * |                                   |    |
+ * |        Trampoline ELF Payload     |  size = 8M
+ * |                                   |    |
  * +-----------------------------------+ <- 0x01000000
  * |//////////(gap / unused)\\\\\\\\\\\|
  * +-----------------------------------+ <- 0x00A01000
