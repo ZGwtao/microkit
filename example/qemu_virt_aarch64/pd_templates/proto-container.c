@@ -13,6 +13,51 @@
 
 #define PROGNAME "[proto-container] "
 
+/*
+ * +-----------------------------------+ <- 0x0FFFFFFFF_FFFFFFFF
+ * | Canonical high portion - unusable |
+ * | virtual addresses                 |
+ * +-----------------------------------+ <- 0x10000000000 (trusted loader stack top)
+ * |        Trusted Loader Stack       |                size = 0x1000 (4K)
+ * +-----------------------------------+ <- 0x0FFFFFFF000
+ * |        Trampoline Stack           |                size = 0x1000
+ * +-----------------------------------+ <- 0x0FFFFDFF000
+ * |        Container Stack            |                size = 0x1000
+ * +-----------------------------------+ <- 0x0FFFFBFF000
+ * |//////////(gap / unused)\\\\\\\\\\\|
+ * +-----------------------------------+
+ * |                                   |
+ * |        Container Segments         |                size = 0x800000
+ * |                                   |
+ * +-----------------------------------+ <- 0x02800000 <= (entry of container client)
+ * |                                   |    |
+ * |        Container ELF Payload      |  size = 0x800000
+ * |                                   |    |
+ * +-----------------------------------+ <- 0x02000000
+ * |                                   |
+ * |        Trampoline Segments        |                size = 0x800000
+ * |                                   |
+ * +-----------------------------------+ <- 0x01800000 <= (entry of trampoline)
+ * |                                   |
+ * |        Trampoline ELF Payload     |                size = 0x800000
+ * |                                   |
+ * +-----------------------------------+ <- 0x01000000
+ * |//////////(gap / unused)\\\\\\\\\\\|
+ * +-----------------------------------+ <- 0x00A01000
+ * | Trusted Loader Metadata (0x1000)  |
+ * +-----------------------------------+ <- 0x00A00000
+ * |                                   |
+ * | Trusted Loader Segments (0x800000)|
+ * |                                   |
+ * +-----------------------------------+ <- 0x00200000 <= _start (entry of proto-container)
+ * |//////////(gap / unused)\\\\\\\\\\\|
+ * +-----------------------------------+ <- 0x00101000
+ * | IPC Buffer (0x1000)               |
+ * +-----------------------------------+ <- 0x00100000
+ * |//////////(gap / unused)\\\\\\\\\\\|
+ * +-----------------------------------+ <- 0x0
+ */
+
 /* 4KB in size, read-only */
 uintptr_t tsldr_metadata    = 0x0A00000;
 uintptr_t trampoline_elf    = 0x1000000;
