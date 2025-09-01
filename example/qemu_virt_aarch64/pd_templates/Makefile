@@ -47,18 +47,19 @@ PACKAGE_PROGS_OBJS := $(BUILD_DIR)/programs.o
 BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 
 # Patched ELF file names
-PATCHED_PROTO_CONTAINER_ELF := $(BUILD_DIR)/proto-container_patched.elf
+# PATCHED_PROTO_CONTAINER_ELF := $(BUILD_DIR)/proto-container_patched.elf
 PATCHED_RECEIVER2_ELF := $(BUILD_DIR)/receiver2_patched.elf
 PATCHED_CLIENT_ELF := $(BUILD_DIR)/client_patched.elf
 PATCHED_TEST_ELF := $(BUILD_DIR)/test_patched.elf
 
 CLIENT_ELF := $(BUILD_DIR)/client.elf
 TRAMPOLINE_ELF := $(BUILD_DIR)/trampoline.elf
+PROTO_CONTAINER_ELF := $(BUILD_DIR)/proto-container.elf
 TEST_ELF := $(BUILD_DIR)/test.elf
 
 # Images to include patched ELF files
 IMAGES := $(BUILD_DIR)/trusted_loader.elf $(BUILD_DIR)/container-monitor.elf \
-			$(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) $(TEST_ELF) $(TRAMPOLINE_ELF) \
+			$(PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) $(TEST_ELF) $(TRAMPOLINE_ELF) \
 			$(BUILD_DIR)/frontend.elf $(BUILD_DIR)/sender_loader.elf
 
 # Private key file
@@ -105,8 +106,8 @@ $(BUILD_DIR)/%.o: %.s Makefile
 	$(AS) -g -mcpu=$(CPU) $< -o $@
 
 # Generate patched ELF files
-$(PATCHED_PROTO_CONTAINER_ELF): $(BUILD_DIR)/proto-container.elf $(PRIVATE_KEY_FILE)
-	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
+# $(PATCHED_PROTO_CONTAINER_ELF): $(BUILD_DIR)/proto-container.elf $(PRIVATE_KEY_FILE)
+#	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
 $(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
@@ -138,11 +139,11 @@ $(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link programs.o with patched ELF dependencies
-$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_PROTO_CONTAINER_ELF) \
+$(PACKAGE_PROGS_OBJS): package_programs.S $(PROTO_CONTAINER_ELF) \
 						$(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF) $(PATCHED_TEST_ELF) \
 						$(TRAMPOLINE_ELF)
 	$(CC) -c -g3 -x assembler-with-cpp \
-		-DPROTO_CONTAINER_PATH=\"$(PATCHED_PROTO_CONTAINER_ELF)\" \
+		-DPROTO_CONTAINER_PATH=\"$(PROTO_CONTAINER_ELF)\" \
 		-DRECEIVER2_PATH=\"$(PATCHED_RECEIVER2_ELF)\" \
 		-DCLIENT_PATH=\"$(PATCHED_CLIENT_ELF)\" \
 		-DTEST_PATH=\"$(PATCHED_TEST_ELF)\" \
@@ -150,7 +151,7 @@ $(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_PROTO_CONTAINER_ELF) \
 		package_programs.S -o $@
 
 # Link proto-container.elf
-$(BUILD_DIR)/proto-container.elf: $(BUILD_DIR)/$(PROTO_CONTAINER_OBJS) \
+$(PROTO_CONTAINER_ELF): $(BUILD_DIR)/$(PROTO_CONTAINER_OBJS) \
                             ${LIBEXTELF} $(LIBCRYPTO) $(LIBTSLDR)
 	$(LD) $(LDFLAGS) --defsym __sel4_ipc_buffer=0x100000 $^ $(LIBS) -o $@
 
