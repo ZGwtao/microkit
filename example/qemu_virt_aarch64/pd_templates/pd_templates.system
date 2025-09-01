@@ -17,7 +17,11 @@
     <memory_region name="container_stack" size="0x1000" page_size="0x1000" />
     <memory_region name="trampoline_stack" size="0x1000" page_size="0x1000" />
 
+    <memory_region name="trampoline_exec" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="trampoline_elf" size="0x800_000" page_size="0x200_000" />
+
     <memory_region name="container_monitor_shared" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="trampoline_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="trusted_loader2_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="client_payload_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="trusted_loader_md" size="0x1000" page_size="0x1000" />
@@ -25,21 +29,26 @@
     <protection_domain_template name="container_monitor" priority="254">
         <program_image path="container-monitor.elf" />
         <map mr="receiver_program" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="user_program" />
+        <map mr="trampoline_exec" vaddr="0xD000000" perms="rwx" cached="true" setvar_vaddr="trampoline_exec" />
+        <map mr="trampoline_elf" vaddr="0xD800000" perms="rwx" cached="true" setvar_vaddr="trampoline_elf" />
         <map mr="client_program" vaddr="0xA00000000" perms="rw" cached="true" setvar_vaddr="client_program" />
         <map mr="container_monitor_shared" vaddr="0x6000000" perms="rw" cached="true" setvar_vaddr="shared1" />
         <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
+        <map mr="trampoline_shared" vaddr="0x6800000" perms="rw" cached="true" setvar_vaddr="shared3" />
         <map mr="trusted_loader_md" vaddr="0x1000000" perms="rw" cached="true" setvar_vaddr="tsldr_metadata" />
 
         <protection_domain name="proto-container" id="1" priority="253">
             <!-- <program_image path="proto-container.elf" /> -->
             <!-- remember to set execute perms for this mapping -->
-            <map mr="receiver_program" vaddr="0x200000" perms="rwx" cached="true" optional="true" />
-            <map mr="client_program" vaddr="0xA000000" perms="rw" cached="true" optional="true" />
-            <map mr="client_exec" vaddr="0xB000000" perms="rwx" cached="true" optional="true" />
+            <map mr="receiver_program" vaddr="0x200000" perms="rwx" cached="true" />
+            <map mr="client_program" vaddr="0xA000000" perms="rw" cached="true" />
+            <map mr="client_exec" vaddr="0xB000000" perms="rwx" cached="true" />
             <map mr="client_test" vaddr="0xC000000" perms="rwx" cached="true" optional="true" />
             <map mr="test_test" vaddr="0xD000000" perms="rwx" cached="true" optional="true" />
             <map mr="container_stack" vaddr="0x80000000" perms="rw" cached="true" />
             <map mr="trampoline_stack" vaddr="0x40000000" perms="rw" cached="true" />
+            <map mr="trampoline_exec" vaddr="0xFF000000" perms="rwx" cached="true" />
+            <map mr="trampoline_elf" vaddr="0xD800000" perms="rwx" cached="true" />
             <map mr="trusted_loader_md" vaddr="0x4000000" perms="r" cached="true" />
             <irq irq="0" id="5" optional="true" />
         </protection_domain>
@@ -50,6 +59,7 @@
         <program_image path="frontend.elf" />
         <map mr="container_monitor_shared" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="shared1" />
         <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
+        <map mr="trampoline_shared" vaddr="0x6000000" perms="rw" cached="true" setvar_vaddr="shared3" />
     </protection_domain>
 
     <protection_domain name="sender_loader" priority="249">

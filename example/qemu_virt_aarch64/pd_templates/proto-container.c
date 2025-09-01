@@ -16,13 +16,13 @@
 /* 4KB in size, read-only */
 uintptr_t tsldr_metadata = 0x4000000;
 static uintptr_t client_elf = 0xA000000;
+uintptr_t trampoline_elf = 0xD800000;
 
 #define STACKS_SIZE 0x1000
 
 uintptr_t trampoline_stack_top = (0x40000000 + STACKS_SIZE);
 uintptr_t tsldr_stack_bottom = (0x10000000000 - STACKS_SIZE);
 uintptr_t container_stack_top = (0x80000000 + STACKS_SIZE);
-uintptr_t container_stack_bottom = (0x80000000);
 
 /* should be refreshed each time we restart */
 uintptr_t client_exec_section = 0xB000000;
@@ -55,6 +55,21 @@ static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
     }
 
     microkit_dbg_printf(PROGNAME "Loaded ELF segments into memory\n");
+}
+
+__attribute__((noreturn))
+static inline void
+jump_to_stack(void *stack_top, entry_fn_t func)
+{
+    asm volatile (
+        "mov sp, %[new_stack]\n\t" /* set new SP */
+        "br  %[func]\n\t"          /* branch directly, never return */
+        :
+        : [new_stack] "r" (stack_top),
+          [func] "r" (func)
+        : "x30", "memory"
+    );
+    __builtin_unreachable();
 }
 
 void init(void)
@@ -90,6 +105,17 @@ void init(void)
         microkit_dbg_printf(PROGNAME "Data in shared memory region is an ELF file\n");
     }
     microkit_dbg_printf(PROGNAME "Verified ELF header\n");
+
+    Elf64_Ehdr *trampoline_ehdr = (Elf64_Ehdr *)trampoline_elf;
+    /* check elf integrity */
+    if (custom_memcmp(trampoline_ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
+        microkit_dbg_printf(PROGNAME "Data in trampoline region must be an ELF file\n");
+        microkit_internal_crash(-1);
+    } else {
+        microkit_dbg_printf(PROGNAME "Data in trampoline region is an ELF file\n");
+    }
+    microkit_dbg_printf(PROGNAME "Verified ELF header\n");
+
     /* parse access rights table */
     Elf64_Shdr *shdr = (Elf64_Shdr *)((char*)ehdr + ehdr->e_shoff);
     const char *shstrtab = (char*)ehdr + shdr[ehdr->e_shstrndx].sh_offset;
@@ -130,6 +156,13 @@ void init(void)
 
     tsldr_loading_epilogue(client_exec_section, (uintptr_t)0x0);
 
+    load_elf((void *)ehdr->e_entry, ehdr);
+    microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
+
+    load_elf((void *)trampoline_ehdr->e_entry, trampoline_ehdr);
+    microkit_dbg_printf(PROGNAME "Load trampoline elf to the targeting memory region\n");
+
+#if 0
     /* switch to a trampoline stack... */
     asm volatile (
         "mov sp, %0\n\t"   /* set SP to new stack top */
@@ -139,32 +172,13 @@ void init(void)
     );
     /* say goodbye to the old stack */
     custom_memset((void *)tsldr_stack_bottom, 0, STACKS_SIZE);
+#endif
+    /* -- now we are ready to jump to the trampoline -- */
 
-    load_elf((void *)ehdr->e_entry, ehdr);
-    microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
+    microkit_dbg_printf(PROGNAME "Switch to the trampoline's code to execute\n");
+    entry_fn_t entry_fn = (entry_fn_t) trampoline_ehdr->e_entry;
 
-    microkit_dbg_printf(PROGNAME "Switch to the client's code to execute\n");
-    entry_fn_t entry_fn = (entry_fn_t) ehdr->e_entry;
-    custom_memset((void *)container_stack_bottom, 0, STACKS_SIZE);
-
-    asm volatile (
-        "mov x0, xzr\n\t"
-        "mov x1, xzr\n\t"
-        "mov x2, xzr\n\t"
-        "mov x3, xzr\n\t"
-        "mov x4, xzr\n\t"
-        "mov x5, xzr\n\t"
-        "mov x6, xzr\n\t"
-        "mov x7, xzr\n\t"
-
-        "mov sp, %[stack_top]\n\t"  /* set new SP */
-        "br  %[target]\n\t"         /* jump to function */
-        :
-        : [stack_top] "r" (container_stack_top),
-          [target] "r"   (entry_fn)
-        : "x0","x1","x2","x3","x4","x5","x6","x7","x30","memory"
-    );
-    __builtin_unreachable();
+    jump_to_stack((void *)trampoline_stack_top, entry_fn);
 }
 
 void notified(microkit_channel ch)

@@ -11,6 +11,8 @@
 
 uintptr_t shared1;
 uintptr_t shared2;
+uintptr_t shared3;
+
 // External ELF binaries
 extern char _proto_container[];
 extern char _proto_container_end[];
@@ -21,6 +23,9 @@ extern char _client_end[];
 extern char _test[];
 extern char _test_end[];
 
+extern char _trampoline[];
+extern char _trampoline_end[];
+
 void init(void)
 {
     microkit_dbg_printf(PROGNAME "Entered init\n");
@@ -30,6 +35,9 @@ void init(void)
 
     custom_memcpy((void *)shared2, _client, _client_end - _client);
     microkit_dbg_printf(PROGNAME "Wrote client's ELF file into memory\n");
+
+    custom_memcpy((void *)shared3, _trampoline, _trampoline_end - _trampoline);
+    microkit_dbg_printf(PROGNAME "Wrote trampoline's ELF file into memory\n");
 
     microkit_dbg_printf(PROGNAME "Making ppc to container monitor backend\n");
 
@@ -44,7 +52,7 @@ void init(void)
     }
 
     custom_memcpy((void *)shared2, _test, _test_end - _test);
-    microkit_dbg_printf(PROGNAME "Wrote client's ELF file into memory\n");
+    microkit_dbg_printf(PROGNAME "Wrote test's ELF file into memory\n");
 
     microkit_mr_set(0, 2);
     info = microkit_ppcall(1, microkit_msginfo_new(0, 1));

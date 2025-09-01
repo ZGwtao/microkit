@@ -78,9 +78,12 @@ seL4_Word channels[MICROKIT_MAX_CHANNELS];
 seL4_Word irqs[MICROKIT_MAX_CHANNELS];
 MemoryMapping mappings[MAX_MAPPINGS];
 uintptr_t user_program;
+uintptr_t trampoline_elf;
+uintptr_t trampoline_exec;
 uintptr_t client_program;
 uintptr_t shared1;
 uintptr_t shared2;
+uintptr_t shared3;
 seL4_Word system_hash;
 
 #define TSLDR_MD_SIZE 0x1000
@@ -234,6 +237,9 @@ seL4_MessageInfo_t monitor_call_debute(void)
 
     custom_memcpy((void*)client_program, (char *)shared2, 0x800000);
     microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
+
+    custom_memcpy((void*)trampoline_elf, (char *)shared3, 0x800000);
+    microkit_dbg_printf(PROGNAME "Copied trampoline program to child PD's memory region\n");
 
     // Restart the child PD at the entry point
     microkit_pd_restart(CHILD_ID, ehdr->e_entry);

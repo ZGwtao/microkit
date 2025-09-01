@@ -28,12 +28,12 @@ _proto_container:
 _proto_container_end:
 #endif
 
-#if defined(proto_container2_PATH)
-.section ._sender, "aw", @progbits
-.global _sender, _sender_end
-_sender:
-.incbin proto_container2_PATH
-_sender_end:
+#if defined(TRAMPOLINE_PATH)
+.section .trampoline, "aw", @progbits
+.global _trampoline, _trampoline_end
+_trampoline:
+.incbin TRAMPOLINE_PATH
+_trampoline_end:
 #endif
 
 #if defined(CLIENT_PATH)

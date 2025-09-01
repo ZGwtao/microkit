@@ -10,7 +10,7 @@ BUILD_DIR ?= build
 
 MICROKIT_SRC_DIR ?= $(CURDIR)/../../..
 MICROKIT_SDK ?= $(MICROKIT_SRC_DIR)/release/microkit-sdk-1.4.1
-SYSTEM_HASH	?= 0x108150fa8f147ae7
+SYSTEM_HASH	?= 0x152a6c0a61f67f4e
 
 # Toolchain and compiler settings
 TOOLCHAIN := aarch64-none-elf
@@ -36,6 +36,7 @@ TRUSTED_LOADER_OBJS := trusted_loader.o
 PROTO_CONTAINER_OBJS := proto-container.o
 RECEIVER2_OBJS := receiver2.o
 CLIENT_OBJS	:= client.o
+TRAMPOLINE_OBJS	:= trampoline.o
 TEST_OBJS	:= test.o
 SENDER_LOADER_OBJS := sender_loader.o
 FRONTEND_OBJS := frontend.o
@@ -52,11 +53,12 @@ PATCHED_CLIENT_ELF := $(BUILD_DIR)/client_patched.elf
 PATCHED_TEST_ELF := $(BUILD_DIR)/test_patched.elf
 
 CLIENT_ELF := $(BUILD_DIR)/client.elf
+TRAMPOLINE_ELF := $(BUILD_DIR)/trampoline.elf
 TEST_ELF := $(BUILD_DIR)/test.elf
 
 # Images to include patched ELF files
 IMAGES := $(BUILD_DIR)/trusted_loader.elf $(BUILD_DIR)/container-monitor.elf \
-			$(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) $(TEST_ELF) \
+			$(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) $(TEST_ELF) $(TRAMPOLINE_ELF) \
 			$(BUILD_DIR)/frontend.elf $(BUILD_DIR)/sender_loader.elf
 
 # Private key file
@@ -136,12 +138,15 @@ $(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 # Link programs.o with patched ELF dependencies
-$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF) $(PATCHED_TEST_ELF)
+$(PACKAGE_PROGS_OBJS): package_programs.S $(PATCHED_PROTO_CONTAINER_ELF) \
+						$(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF) $(PATCHED_TEST_ELF) \
+						$(TRAMPOLINE_ELF)
 	$(CC) -c -g3 -x assembler-with-cpp \
 		-DPROTO_CONTAINER_PATH=\"$(PATCHED_PROTO_CONTAINER_ELF)\" \
 		-DRECEIVER2_PATH=\"$(PATCHED_RECEIVER2_ELF)\" \
 		-DCLIENT_PATH=\"$(PATCHED_CLIENT_ELF)\" \
 		-DTEST_PATH=\"$(PATCHED_TEST_ELF)\" \
+		-DTRAMPOLINE_PATH=\"$(TRAMPOLINE_ELF)\" \
 		package_programs.S -o $@
 
 # Link proto-container.elf
@@ -153,6 +158,10 @@ $(BUILD_DIR)/proto-container.elf: $(BUILD_DIR)/$(PROTO_CONTAINER_OBJS) \
 $(BUILD_DIR)/receiver2.elf: $(BUILD_DIR)/$(RECEIVER2_OBJS) \
                             ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(TRAMPOLINE_ELF): $(BUILD_DIR)/$(TRAMPOLINE_OBJS) \
+					${LIBEXTELF}
+	$(LD) $(LDFLAGS) -Ttext=0xFF000000 $^ $(LIBS) -o $@
 
 $(CLIENT_ELF): $(BUILD_DIR)/$(CLIENT_OBJS)
 	$(LD) $(LDFLAGS) -Ttext=0xB000000 $^ $(LIBS) -o $@
