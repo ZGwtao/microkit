@@ -126,7 +126,7 @@ $(BUILD_DIR)/container-monitor.elf: $(BUILD_DIR)/$(MONITOR_OBJS) \
 
 # Link trusted_loader.elf
 $(BUILD_DIR)/trusted_loader.elf: $(BUILD_DIR)/$(TRUSTED_LOADER_OBJS) \
-                                 ${LIBEXTELF} ${LIBCRYPTO} \
+                                 ${LIBEXTELF} ${LIBCRYPTO} $(LIBTSLDR) \
                                  $(PACKAGE_PROGS_OBJS)
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 

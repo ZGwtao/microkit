@@ -124,25 +124,13 @@ void init(void)
     }
     microkit_dbg_printf(PROGNAME "Verified ELF header\n");
 
-    /* parse access rights table */
-    Elf64_Shdr *shdr = (Elf64_Shdr *)((char*)ehdr + ehdr->e_shoff);
-    const char *shstrtab = (char*)ehdr + shdr[ehdr->e_shstrndx].sh_offset;
-
     char *section = NULL;
     seL4_Word section_size = 0;
 
-    for (int i = 0; i < ehdr->e_shnum; i++) {
-        const char *section_name = shstrtab + shdr[i].sh_name;
-        if (custom_strcmp(section_name, ".access_rights") == 0) {
-            section = (char*)ehdr + shdr[i].sh_offset;
-            section_size = shdr[i].sh_size;
-            break;
-        }
-    }
-
-    if (section == NULL) {
-        microkit_dbg_printf(PROGNAME ".access_rights section not found in ELF\n");
-        microkit_internal_crash(-1);
+    /* parse access rights table */
+    error = tsldr_parse_rights(ehdr, &section, &section_size);
+    if (error) {
+        microkit_internal_crash(error);
     }
 
     /* populate the access rights to the loader */

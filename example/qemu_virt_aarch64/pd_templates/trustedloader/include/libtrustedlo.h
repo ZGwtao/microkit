@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <microkit.h>
+#include <elf_utils.h>
 
 /* use ED25519 algorithm for encryption now */
 #define PUBLIC_KEY_BYTES        32
@@ -142,6 +143,9 @@ typedef struct {
     crypto_verify_fn verify_func;
 
 } trusted_loader_t;
+
+
+seL4_Error tsldr_parse_rights(Elf64_Ehdr *ehdr, char *ref_section[], seL4_Word *size);
 
 /**
  * @brief Populates access rights and verifies signature of the data.

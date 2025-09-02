@@ -16,6 +16,7 @@
 #include "ed25519.h"
 #include "elf.h"
 #include "elf_utils.h"
+#include <libtrustedlo.h>
 
 #define PROGNAME "[trusted_loader] "
 
@@ -39,35 +40,8 @@
 #define NUM_ENTRIES_SIZE                    sizeof(uint32_t)
 #define ACCESS_RIGHT_ENTRY_SIZE             9 // 1 byte for type + 8 bytes for data
 
-// Access types
-typedef enum {
-    ACCESS_TYPE_CHANNEL = 0x01,
-    ACCESS_TYPE_IRQ     = 0x02,
-    ACCESS_TYPE_MEMORY  = 0x03
-} AccessType;
-
-// Structure to hold each access right entry
-typedef struct {
-    AccessType type;
-    seL4_Word data; // For CHANNEL and IRQ: ID; For MEMORY: VADDR
-} AccessRightEntry;
-
-// Structure to hold all access rights
-typedef struct {
-    seL4_Word system_hash;
-    uint32_t num_entries;
-    AccessRightEntry entries[MAX_ACCESS_RIGHTS];
-} AccessRights;
-
-// Structure for memory mapping
-typedef struct {
-    seL4_Word vaddr;
-    seL4_Word page;
-    seL4_Word number_of_pages;
-    seL4_Word page_size;
-    seL4_Word rights;
-    seL4_Word attrs;
-} MemoryMapping;
+/* dummy def */
+uintptr_t tsldr_metadata;
 
 // Public key for verifying signatures (256-bit for Ed25519)
 // Initialize with zeros; should be patched externally with the actual public key
@@ -149,28 +123,14 @@ seL4_MessageInfo_t monitor_call_debute(void)
 
     microkit_dbg_printf(PROGNAME "Verified ELF header\n");
 
-    // Locate the .access_rights section
-    Elf64_Shdr *shdr = (Elf64_Shdr *)((char*)ehdr + ehdr->e_shoff);
-    const char *shstrtab = (char*)ehdr + shdr[ehdr->e_shstrndx].sh_offset;
-
     char *section = NULL;
     seL4_Word section_size = 0;
 
-    for (int i = 0; i < ehdr->e_shnum; i++) {
-        const char *section_name = shstrtab + shdr[i].sh_name;
-        if (custom_strcmp(section_name, ".access_rights") == 0) {
-            section = (char*)ehdr + shdr[i].sh_offset;
-            section_size = shdr[i].sh_size;
-            break;
-        }
+    /* parse access rights table */
+    seL4_Error error = tsldr_parse_rights(ehdr, &section, &section_size);
+    if (error) {
+        microkit_internal_crash(error);
     }
-
-    if (section == NULL) {
-        microkit_dbg_printf(PROGNAME ".access_rights section not found in ELF\n");
-        return microkit_msginfo_new(seL4_InvalidArgument, 0);
-    }
-
-    seL4_Error error;
 
     // Verify the signature (only the relevant part of the section)
     error = populate_rights(

@@ -47,6 +47,34 @@ static seL4_Word find_irq_by_index(trusted_loader_t *loader, seL4_Word index_dat
     return md->irqs[index_data];
 }
 
+seL4_Error tsldr_parse_rights(Elf64_Ehdr *ehdr, char *ref_section[], seL4_Word *size)
+{
+    if (ref_section == NULL || size == NULL) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Invalid args to parse access rights\n");
+        return seL4_InvalidArgument;
+    }
+
+    Elf64_Shdr *shdr = (Elf64_Shdr *)((char*)ehdr + ehdr->e_shoff);
+    const char *shstrtab = (char*)ehdr + shdr[ehdr->e_shstrndx].sh_offset;
+
+    for (int i = 0; i < ehdr->e_shnum; i++) {
+        const char *section_name = shstrtab + shdr[i].sh_name;
+        if (custom_strcmp(section_name, ".access_rights") == 0) {
+            *ref_section = (char*)ehdr + shdr[i].sh_offset;
+            *size = shdr[i].sh_size;
+            break;
+        }
+    }
+
+    if (*ref_section == NULL) {
+        microkit_dbg_printf(LIB_NAME_MACRO ".access_rights section not found in ELF\n");
+        return seL4_InvalidArgument;
+    }
+
+    return seL4_NoError;
+}
+
+
 seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *signed_message, size_t len)
 {
     if (!loader) {
