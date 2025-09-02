@@ -133,7 +133,7 @@ def add_section_to_elf(input_elf_path, output_elf_path, section_name, section_co
     new_section.flags = lief.ELF.Section.FLAGS.ALLOC
 
     # Add the section to the ELF binary
-    binary.add(new_section, loaded=True)
+    binary.add(new_section, loaded=False)
 
     # Write the modified ELF to the output path
     binary.write(output_elf_path)
