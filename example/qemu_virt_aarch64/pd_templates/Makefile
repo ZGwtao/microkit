@@ -153,7 +153,10 @@ $(PACKAGE_PROGS_OBJS): package_programs.S $(PROTO_CONTAINER_ELF) \
 # Link proto-container.elf
 $(PROTO_CONTAINER_ELF): $(BUILD_DIR)/$(PROTO_CONTAINER_OBJS) \
                             ${LIBEXTELF} $(LIBCRYPTO) $(LIBTSLDR)
-	$(LD) $(LDFLAGS) --defsym __sel4_ipc_buffer=0x100000 $^ $(LIBS) -o $@
+	$(LD) $(LDFLAGS) \
+		--defsym __sel4_ipc_buffer=0x100000 \
+		--defsym loader=0xE00000 \
+		$^ $(LIBS) -o $@
 
 # Link receiver2.elf
 $(BUILD_DIR)/receiver2.elf: $(BUILD_DIR)/$(RECEIVER2_OBJS) \

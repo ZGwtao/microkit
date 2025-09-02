@@ -452,6 +452,49 @@ seL4_Error tsldr_loading_epilogue(uintptr_t client_exec, uintptr_t client_stack)
 
     seL4_Error error;
 
+    error = seL4_CNode_Move(
+        CNODE_SELF_CAP, CNODE_VSPACE_CAP, PD_CAP_BITS,
+        CNODE_BACKGROUND_CAP, BACKGROUND_VSPACE_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to move vspace to current CNode for manipulation\n");
+        return error;
+    }
+    microkit_dbg_printf(LIB_NAME_MACRO "Move target VSpace to current CNode for manipulation\n");
+
+    error = seL4_CNode_Move(
+        CNODE_SELF_CAP, CNODE_TSLDR_CONTEXT_CAP, PD_CAP_BITS,
+        CNODE_BACKGROUND_CAP, BACKGROUND_TSLDR_CONTEXT_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to move target page to current CNode for unmapping\n");
+        return error;
+    }
+    microkit_dbg_printf(LIB_NAME_MACRO "Move target page to current CNode for unmapping\n");
+    
+    error = seL4_ARM_Page_Unmap(CNODE_TSLDR_CONTEXT_CAP);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to map context to initialise loader\n");
+        return error;
+    }
+
+    /* backing up the mapped page */
+    error = seL4_CNode_Move(
+        CNODE_BACKGROUND_CAP, BACKGROUND_TSLDR_CONTEXT_CAP, PD_CAP_BITS,
+        CNODE_SELF_CAP, CNODE_TSLDR_CONTEXT_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to move target page back to background CNode for backup\n");
+        return error;
+    }
+    microkit_dbg_printf(LIB_NAME_MACRO "Move target page back to background CNode for backup\n");
+
+    error = seL4_CNode_Move(
+        CNODE_BACKGROUND_CAP, BACKGROUND_VSPACE_CAP, PD_CAP_BITS,
+        CNODE_SELF_CAP, CNODE_VSPACE_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to move vspace back to background CNode for backup\n");
+        return error;
+    }
+    microkit_dbg_printf(LIB_NAME_MACRO "Move target VSpace to background CNode for backup\n");
+
     error = seL4_CNode_Delete(CNODE_SELF_CAP, CNODE_BACKGROUND_CAP, PD_CAP_BITS);
     if (error != seL4_NoError) {
         microkit_dbg_printf(LIB_NAME_MACRO "Unable to remove cap of background CNode during epilogue\n");
@@ -480,6 +523,55 @@ seL4_Error tsldr_loading_epilogue(uintptr_t client_exec, uintptr_t client_stack)
 seL4_Error tsldr_loading_prologue(trusted_loader_t *loader)
 {
     microkit_dbg_printf(LIB_NAME_MACRO "trusted loader init prologue\n");
+
+    seL4_Error error = seL4_CNode_Move(
+        CNODE_SELF_CAP, CNODE_VSPACE_CAP, PD_CAP_BITS,
+        CNODE_BACKGROUND_CAP, BACKGROUND_VSPACE_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to move vspace to current CNode for manipulation\n");
+        return error;
+    }
+    microkit_dbg_printf(LIB_NAME_MACRO "Move target VSpace to current CNode for manipulation\n");
+
+    error = seL4_CNode_Move(
+        CNODE_SELF_CAP, CNODE_TSLDR_CONTEXT_CAP, PD_CAP_BITS,
+        CNODE_BACKGROUND_CAP, BACKGROUND_TSLDR_CONTEXT_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to move target page to current CNode for unmapping\n");
+        return error;
+    }
+    microkit_dbg_printf(LIB_NAME_MACRO "Move target page to current CNode for unmapping\n");
+    
+    error = seL4_ARM_Page_Map(
+        CNODE_TSLDR_CONTEXT_CAP,
+        CNODE_VSPACE_CAP,
+        0xE00000,
+        seL4_AllRights,
+        2
+    );
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to map context to initialise loader\n");
+        return error;
+    }
+
+    /* backing up the mapped page */
+    error = seL4_CNode_Move(
+        CNODE_BACKGROUND_CAP, BACKGROUND_TSLDR_CONTEXT_CAP, PD_CAP_BITS,
+        CNODE_SELF_CAP, CNODE_TSLDR_CONTEXT_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to move target page back to background CNode for backup\n");
+        return error;
+    }
+    microkit_dbg_printf(LIB_NAME_MACRO "Move target page back to background CNode for backup\n");
+
+    error = seL4_CNode_Move(
+        CNODE_BACKGROUND_CAP, BACKGROUND_VSPACE_CAP, PD_CAP_BITS,
+        CNODE_SELF_CAP, CNODE_VSPACE_CAP, PD_CAP_BITS);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to move vspace back to background CNode for backup\n");
+        return error;
+    }
+    microkit_dbg_printf(LIB_NAME_MACRO "Move target VSpace to background CNode for backup\n");
 
     if (!loader->flag_bootstrap) {
         /* set flag to prevent re-initialisation */

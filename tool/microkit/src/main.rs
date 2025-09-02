@@ -40,6 +40,7 @@ use util::{
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
 const SYMBOL_IPC_BUFFER_DELAY: u64 = 0x100_000;
+const SYMBOL_TRUSTED_LOADER_CONTEXT: u64 = 0xE00_000;
 
 const ED25519_PUBLIC_KEY_BYTES: usize = 32;
 
@@ -78,6 +79,9 @@ const PD_TEMPLATE_BACKGROUND_CNODE: u64 = PD_TEMPLATE_BACKGROUND_ROOT + 1;
 /* for the child, where to find its own CNode */
 const PD_TEMPLATE_CHILD_CNODE: u64 = PD_TEMPLATE_BACKGROUND_CNODE + 1;
 
+/* for the parent, where to reference the trusted loader context */
+const TRUSTED_LOADER_CONTEXT: u64 = PD_TEMPLATE_CHILD_CNODE + 1;
+
 /* for the background, where to find the child CNode */
 const BACKGROUND_CSPACE_CAP_IDX: u64 = 8;
 const BACKGROUND_VSPACE_CAP_IDX: u64 = 9;
@@ -85,6 +89,7 @@ const BACKGROUND_CNODE_NOTIFICATION_CAP: u64 = 10;
 const BACKGROUND_CNODE_IRQ_CAP: u64 = BACKGROUND_CNODE_NOTIFICATION_CAP + 64;
 const BACKGROUND_CNODE_PPC_CAP: u64 = BACKGROUND_CNODE_IRQ_CAP + 64;
 const BACKGROUND_CNODE_MAPPING_CAP: u64 = BACKGROUND_CNODE_PPC_CAP + 64;
+const BACKGROUND_CNODE_TSLDR_CONTEXT_CAP: u64 = 500;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
@@ -1546,6 +1551,14 @@ fn build_system(
         );
         small_page_names.push(ipc_buffer_str);
     }
+    for pd in &system.protection_domains {
+        let (page_size_human, page_size_label) = util::human_size_strict(PageSize::Large as u64);
+        let tsldr_context_str = format!(
+            "Page({} {}): tsldr context PD={}",
+            page_size_human, page_size_label, pd.name
+        );
+        large_page_names.push(tsldr_context_str);
+    }
 
     for mr in &all_mrs {
         if mr.phys_addr.is_some() {
@@ -1572,11 +1585,12 @@ fn build_system(
 
     // All the IPC buffers are the first to be allocated which is why this works
     let ipc_buffer_objs = &small_page_objs[..system.protection_domains.len()];
+    let tsldr_context_objs = &large_page_objs[..system.protection_domains.len()];
 
     let mut mr_pages: HashMap<&SysMemoryRegion, Vec<Object>> = HashMap::new();
 
     let mut page_small_idx = ipc_buffer_objs.len();
-    let mut page_large_idx = 0;
+    let mut page_large_idx = tsldr_context_objs.len();
 
     for mr in &all_mrs {
         if mr.phys_addr.is_some() {
@@ -1764,6 +1778,7 @@ fn build_system(
         } else {
             // println!("pd={} no ipc_buffer_vaddr", pd.name);
             vaddrs.push((SYMBOL_IPC_BUFFER_DELAY, PageSize::Small));
+            vaddrs.push((SYMBOL_TRUSTED_LOADER_CONTEXT, PageSize::Large));
         }
 
         let mut upper_directory_vaddrs = HashSet::new();
@@ -3070,6 +3085,60 @@ fn build_system(
                     attr: ipc_buffer_attr,
                 },
             ));
+        }
+    }
+
+    // map the trusted loader context & keep the cap
+    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        if let Some(parent_idx) = pd.parent {
+            /* check if the parent is PD template  */
+            if system.protection_domains[parent_idx].is_template {
+
+                let tsldr_context_obj = tsldr_context_objs[pd_idx];
+                /* back up in parent's CNode */
+                let cnode_obj = &cnode_objs[parent_idx];
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: cnode_obj.cap_addr,
+                        dest_index: TRUSTED_LOADER_CONTEXT,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: tsldr_context_obj.cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64,
+                        badge: 0,
+                    },
+                ));
+                /* back up in template's background CNode */
+                let bg_cnode_obj = &bg_cnode_objs[pd_idx];
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: bg_cnode_obj.cap_addr,
+                        dest_index: BACKGROUND_CNODE_TSLDR_CONTEXT_CAP,
+                        dest_depth: PD_CAP_BITS,
+                        src_root: root_cnode_cap,
+                        src_obj: tsldr_context_obj.cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights: Rights::All as u64,
+                        badge: 0,
+                    },
+                ));
+
+                /* map in parent's address space as shared memory */
+                system_invocations.push(Invocation::new(
+                    config,
+                    InvocationArgs::PageMap {
+                        page: tsldr_context_obj.cap_addr,
+                        vspace: pd_vspace_objs[parent_idx].cap_addr,
+                        vaddr: SYMBOL_TRUSTED_LOADER_CONTEXT,
+                        rights: Rights::Read as u64 | Rights::Write as u64,
+                        attr: ArmVmAttributes::ParityEnabled as u64,
+                    },
+                ));
+                /* -- don't map to child's address space ... -- */
+            }
         }
     }
 

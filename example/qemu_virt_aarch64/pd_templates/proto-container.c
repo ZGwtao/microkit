@@ -43,6 +43,12 @@
  * |                                   |    |
  * +-----------------------------------+ <- 0x01000000
  * |//////////(gap / unused)\\\\\\\\\\\|
+ * +-----------------------------------+ <- 0x01000000
+ * |                                   |
+ * |   trusted loader init (0x200000)  |
+ * |                                   |
+ * +-----------------------------------+ <- 0x00E00000
+ * |//////////(gap / unused)\\\\\\\\\\\|
  * +-----------------------------------+ <- 0x00A01000
  * | Trusted Loader Metadata (0x1000)  |
  * +-----------------------------------+ <- 0x00A00000
@@ -111,6 +117,8 @@ void init(void)
         microkit_internal_crash(-1);
     }
 
+    tsldr_loading_prologue(&loader);
+
     /* initialise the real trusted loader... */
     if (loader.init != true) {
         tsldr_init(&loader, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
@@ -118,8 +126,6 @@ void init(void)
         /* loader is now initialised... */
         loader.init = true;
     }
-
-    tsldr_loading_prologue(&loader);
 
     seL4_Error error;
 
