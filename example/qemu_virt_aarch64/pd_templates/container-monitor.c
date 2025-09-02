@@ -12,11 +12,6 @@
 
 #define PROGNAME "[container monitor] "
 
-// Child PD caps
-#define CHILD_ID                1
-#define CHILD_CSPACE_CAP        8
-#define PD_TEMPLATE_CNODE_ROOT  586
-
 // Global variables (patched externally)
 seL4_Word channels[MICROKIT_MAX_CHANNELS];
 seL4_Word irqs[MICROKIT_MAX_CHANNELS];
@@ -120,7 +115,7 @@ seL4_MessageInfo_t monitor_call_debute(void)
     microkit_dbg_printf(PROGNAME "Copied trampoline program to child PD's memory region\n");
 
     // Restart the child PD at the entry point
-    microkit_pd_restart(CHILD_ID, ehdr->e_entry);
+    microkit_pd_restart(PD_TEMPLATE_CHILD_TCB, ehdr->e_entry);
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
     return microkit_msginfo_new(seL4_NoError, 0);
 }
@@ -151,7 +146,7 @@ seL4_MessageInfo_t monitor_call_restart(void)
     ctxt.pc = ehdr->e_entry;
     ctxt.sp = 0x10000000000;
     error = seL4_TCB_WriteRegisters(
-              BASE_TCB_CAP + CHILD_ID,
+              BASE_TCB_CAP + PD_TEMPLATE_CHILD_TCB,
               seL4_True,
               0, /* No flags */
               1, /* writing 1 register */
