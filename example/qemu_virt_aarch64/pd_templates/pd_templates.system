@@ -29,13 +29,13 @@
     <protection_domain_template name="container_monitor" priority="254">
         <program_image path="container-monitor.elf" />
 
-        <map mr="trusted_loader_exec" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="user_program" />
+        <map mr="trusted_loader_exec" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="trusted_loader_exec" />
         <map mr="trusted_loader_md" vaddr="0x1000000" perms="rw" cached="true" setvar_vaddr="tsldr_metadata" />
 
-        <map mr="trampoline_exec" vaddr="0xD000000" perms="rwx" cached="true" setvar_vaddr="trampoline_exec" />
+        <map mr="trampoline_exec" vaddr="0xD000000" perms="rwx" cached="true" />
         <map mr="trampoline_elf" vaddr="0xD800000" perms="rwx" cached="true" setvar_vaddr="trampoline_elf" />
 
-        <map mr="container_elf" vaddr="0xA00000000" perms="rw" cached="true" setvar_vaddr="client_program" />
+        <map mr="container_elf" vaddr="0xA00000000" perms="rw" cached="true" setvar_vaddr="container_elf" />
 
         <map mr="container_monitor_shared" vaddr="0x6000000" perms="rw" cached="true" setvar_vaddr="shared1" />
         <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />

@@ -16,13 +16,15 @@
 seL4_Word channels[MICROKIT_MAX_CHANNELS];
 seL4_Word irqs[MICROKIT_MAX_CHANNELS];
 MemoryMapping mappings[MICROKIT_MAX_CHANNELS];
-uintptr_t user_program;
+
+uintptr_t trusted_loader_exec;
 uintptr_t trampoline_elf;
-uintptr_t trampoline_exec;
-uintptr_t client_program;
+uintptr_t container_elf;
+
 uintptr_t shared1;
 uintptr_t shared2;
 uintptr_t shared3;
+
 seL4_Word system_hash;
 unsigned char public_key[PUBLIC_KEY_BYTES];
 
@@ -105,10 +107,10 @@ seL4_MessageInfo_t monitor_call_debute(void)
     /* init metadata for proto-container's tsldr */
     tsldr_init_metadata();
 
-    load_elf((void*)user_program, ehdr);
+    load_elf((void*)trusted_loader_exec, ehdr);
     microkit_dbg_printf(PROGNAME "Copied trusted loader to child PD's memory region\n");
 
-    custom_memcpy((void*)client_program, (char *)shared2, 0x800000);
+    custom_memcpy((void*)container_elf, (char *)shared2, 0x800000);
     microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
 
     custom_memcpy((void*)trampoline_elf, (char *)shared3, 0x800000);
@@ -133,10 +135,10 @@ seL4_MessageInfo_t monitor_call_restart(void)
     /* reload the trusted loader to the target place */
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
-    load_elf((void*)user_program, ehdr);
+    load_elf((void*)trusted_loader_exec, ehdr);
     microkit_dbg_printf(PROGNAME "Copied trusted loader to child PD's memory region\n");
 
-    custom_memcpy((void*)client_program, (char *)shared2, 0x800000);
+    custom_memcpy((void*)container_elf, (char *)shared2, 0x800000);
     microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
 
     /* set a flag for the trusted loader to check whether to boot or to restart... */
