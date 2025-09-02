@@ -5,6 +5,7 @@
  */
 #include "elf_utils.h"
 #include <stdint.h>
+#include <stddef.h>
 #include <microkit.h>
 
 #define PROGNAME "[sender] "
@@ -18,4 +19,10 @@ void init(void)
 void notified(microkit_channel ch)
 {
     microkit_dbg_printf(PROGNAME "Received notification on channel: %d\n", ch);
+
+    seL4_Signal(12);
+
+    seL4_Signal(11);
+
+    microkit_dbg_printf(PROGNAME "Exit notified() \n");
 }

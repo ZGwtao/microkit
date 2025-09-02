@@ -1,4 +1,5 @@
 #include <microkit.h>
+#include <elf_utils.h>
 
 void init(void)
 {
@@ -11,5 +12,5 @@ void init(void)
 
 void notified(microkit_channel ch)
 {
-    ;
+    microkit_dbg_printf("Received notification on channel: %d\n", ch);
 }

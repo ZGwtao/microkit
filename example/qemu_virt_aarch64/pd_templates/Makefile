@@ -170,7 +170,7 @@ $(TRAMPOLINE_ELF): $(BUILD_DIR)/$(TRAMPOLINE_OBJS) \
 $(CLIENT_ELF): $(BUILD_DIR)/$(CLIENT_OBJS)
 	$(LD) $(LDFLAGS) -Ttext=0x2800000 $^ $(LIBS) -o $@
 
-$(TEST_ELF): $(BUILD_DIR)/$(TEST_OBJS)
+$(TEST_ELF): $(BUILD_DIR)/$(TEST_OBJS) ${LIBEXTELF}
 	$(LD) $(LDFLAGS) -Ttext=0x2800000 $^ $(LIBS) -o $@
 
 # Generate final image and report
