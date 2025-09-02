@@ -78,7 +78,9 @@ uintptr_t container_stack_top   = (0x0FFFFC00000);
 
 typedef void (*entry_fn_t)(void);
 
-trusted_loader_t loader;
+/* 0xE00000 */
+static trusted_loader_t loader;
+
 
 void init(void)
 {
@@ -94,11 +96,11 @@ void init(void)
     tsldr_loading_prologue(&loader);
 
     /* initialise the real trusted loader... */
-    if (loader.init != true) {
+    if (loader.flags.init != true) {
         tsldr_init(&loader, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
         custom_memcpy(loader.public_key, md->public_key, sizeof(md->public_key));
         /* loader is now initialised... */
-        loader.init = true;
+        loader.flags.init = true;
     }
 
     seL4_Error error;

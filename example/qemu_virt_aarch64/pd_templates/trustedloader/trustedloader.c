@@ -20,7 +20,7 @@ MemoryMapping *tsldr_find_mapping_by_vaddr(trusted_loader_t *loader, seL4_Word v
         }
         /* tsldr metadata */
         tsldr_md_t *md = (tsldr_md_t *)data;
-        if (md->init != true || loader->init != true) {
+        if (md->init != true || loader->flags.init != true) {
             microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
             return NULL;
         }
@@ -44,7 +44,7 @@ MemoryMapping *tsldr_find_mapping_by_vaddr(trusted_loader_t *loader, seL4_Word v
 static seL4_Word find_channel_by_index(trusted_loader_t *loader, seL4_Word index_data)
 {
     tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
-    if (md->init != true || loader->init != true) {
+    if (md->init != true || loader->flags.init != true) {
         microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
         return 0;
     }
@@ -54,7 +54,7 @@ static seL4_Word find_channel_by_index(trusted_loader_t *loader, seL4_Word index
 static seL4_Word find_irq_by_index(trusted_loader_t *loader, seL4_Word index_data)
 {
     tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
-    if (md->init != true || loader->init != true) {
+    if (md->init != true || loader->flags.init != true) {
         microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
         return 0;
     }
@@ -265,8 +265,8 @@ void tsldr_remove_caps(trusted_loader_t *loader)
     }
 
     /* set the flag to restore cap during restart */
-    if (!loader->flag_restore_caps)
-        loader->flag_restore_caps = true;
+    if (!loader->flags.flag_restore_caps)
+        loader->flags.flag_restore_caps = true;
 
     seL4_Error error;
 
@@ -379,7 +379,7 @@ void tsldr_restore_caps(trusted_loader_t *loader)
     }
 
     /* if no need to restore caps */
-    if (!loader->flag_restore_caps) {
+    if (!loader->flags.flag_restore_caps) {
         microkit_dbg_printf(LIB_NAME_MACRO "No caps to restore at this point\n");
         return;
     }
@@ -615,9 +615,9 @@ seL4_Error tsldr_loading_prologue(trusted_loader_t *loader)
     }
     microkit_dbg_printf(LIB_NAME_MACRO "Move target VSpace to background CNode for backup\n");
 
-    if (!loader->flag_bootstrap) {
+    if (!loader->flags.flag_bootstrap) {
         /* set flag to prevent re-initialisation */
-        loader->flag_bootstrap = true;
+        loader->flags.flag_bootstrap = true;
         microkit_dbg_printf(LIB_NAME_MACRO "Bootstrap trusted loader\n");
 
     } else {

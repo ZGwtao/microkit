@@ -104,44 +104,41 @@ typedef int (*crypto_verify_fn)(const unsigned char *signature,
                                 const unsigned char *public_key);
 
 
-/* class of trusted loader */
+/* Trusted loader metadata / state */
 typedef struct {
-
-    /* access right table */
+    /* Access right table */
     AccessRights access_rights;
+
     /*
-     * types of rights:
-     *  1. PPC channels
-     *  2. IRQ channels
-     *  3. Mappings
+     * Rights bitmaps / filters:
+     *   1. Channels
+     *   2. IRQs
+     *   3. Mappings
      */
-    bool allowed_channels[MICROKIT_MAX_CHANNELS];
-    bool allowed_irqs[MICROKIT_MAX_CHANNELS];
+    bool          allowed_channels[MICROKIT_MAX_CHANNELS];
+    bool          allowed_irqs[MICROKIT_MAX_CHANNELS];
     MemoryMapping allowed_mappings[MICROKIT_MAX_CHANNELS];
 
-    /* mapping bookkeeping */
-    int num_allowed_mappings;
+    /* Mapping bookkeeping */
+    int num_allowed_mappings;   /* 32-bit, but promotes with padding to 64-bit boundary */
 
-    /* restart flag for capabilities */
-    bool removed_caps;
+    /* Capability management / state flags */
+    struct {
+        bool removed_caps; /* unused for now ... */
+        bool flag_bootstrap;
+        bool flag_restore_caps;
+        bool init;
+        /* compiler will pad this group to 8 bytes */
+    } flags;
 
-    bool flag_bootstrap;
-
-    bool flag_restore_caps;
-
-    /* crypto */
-    bool init;
-
-    seL4_Word system_hash;
-
-    size_t hash_len;
-    size_t signature_len;
-
+    /* Crypto / verification */
+    seL4_Word     system_hash;               /* 8 bytes */
+    size_t        hash_len;                  /* 8 bytes */
+    size_t        signature_len;             /* 8 bytes */
     unsigned char public_key[PUBLIC_KEY_BYTES];
 
-    /* hook for signature verification function */
+    /* Hook for signature verification function */
     crypto_verify_fn verify_func;
-
 } trusted_loader_t;
 
 
