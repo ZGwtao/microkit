@@ -83,7 +83,9 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
         ret = monitor_call_restart();
         break;
     default:
-        ;
+        /* do nothing for now */
+        microkit_dbg_printf(PROGNAME "Undefined container monitor call: %lu\n", monitorcall_number);
+        break;
     }
 
     return ret;
