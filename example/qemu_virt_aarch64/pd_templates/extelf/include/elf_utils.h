@@ -2,6 +2,7 @@
 #define ELF_CHECKER_H
 
 #include <stdint.h>
+#include <elf.h>
 
 /**
  * @brief Checks whether the ELF file is valid and prints its information.

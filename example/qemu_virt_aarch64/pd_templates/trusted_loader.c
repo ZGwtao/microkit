@@ -115,7 +115,6 @@ static bool removed_caps = false;
 // Function prototypes
 static seL4_Error populate_rights(AccessRights *rights, const unsigned char *verified_data, size_t verified_data_len);
 static seL4_Error populate_allowed(const AccessRights *rights);
-static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr);
 static MemoryMapping* find_mapping_by_vaddr(seL4_Word vaddr);
 static void remove_caps();
 static void restore_caps();
@@ -402,34 +401,6 @@ static seL4_Error populate_rights(AccessRights* rights, const unsigned char *sig
     }
 
     return seL4_NoError;
-}
-
-/**
- * @brief Loads ELF segments into the child PD's memory.
- *
- * @param ehdr Pointer to ELF header.
- */
-static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
-{
-    Elf64_Phdr *phdr = (Elf64_Phdr *)((char*)ehdr + ehdr->e_phoff);
-
-    for (int i = 0; i < ehdr->e_phnum; i++) {
-        if (phdr[i].p_type != PT_LOAD) {
-            continue;
-        }
-
-        void *src = (char*)ehdr + phdr[i].p_offset;
-        void *dest = (void *)(dest_vaddr + phdr[i].p_vaddr - ehdr->e_entry);
-
-        custom_memcpy(dest, src, phdr[i].p_filesz);
-
-        if (phdr[i].p_memsz > phdr[i].p_filesz) {
-            seL4_Word bss_size = phdr[i].p_memsz - phdr[i].p_filesz;
-            custom_memset((char *)dest + phdr[i].p_filesz, 0, bss_size);
-        }
-    }
-
-    microkit_dbg_printf(PROGNAME "Loaded ELF segments into memory\n");
 }
 
 /**

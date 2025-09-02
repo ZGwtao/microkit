@@ -120,7 +120,7 @@ $(PATCHED_TEST_ELF): $(TEST_ELF) $(PRIVATE_KEY_FILE)
 
 # Link container-monitor.elf
 $(BUILD_DIR)/container-monitor.elf: $(BUILD_DIR)/$(MONITOR_OBJS) \
-                                 ${LIBEXTELF} ${LIBCRYPTO} \
+                                 ${LIBEXTELF} ${LIBCRYPTO} $(LIBTSLDR) \
                                  $(PACKAGE_PROGS_OBJS)
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 

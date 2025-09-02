@@ -1,7 +1,7 @@
 /*
- * Trusted loader for loading ELF binaries into child PDs.
+ * Container monitor prototype.
  *
- * Copyright 2024, UNSW
+ * Copyright 2025, UNSW
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
@@ -10,73 +10,27 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdarg.h>
-
 #include <microkit.h>
-
 #include "ed25519.h"
 #include "elf.h"
 #include "elf_utils.h"
+#include <libtrustedlo.h>
 
 #define PROGNAME "[container monitor] "
 
 // Child PD caps
-#define CHILD_ID                            1
-#define CHILD_CSPACE_CAP                    8
-#define CHILD_VSPACE_CAP                    9
-#define CHILD_BASE_OUTPUT_NOTIFICATION_CAP  394
-#define CHILD_BASE_IRQ_CAP                  458
-#define CHILD_BASE_MAPPING_CAP              522
-#define PD_TEMPLATE_CNODE_ROOT              586
-
-#define PD_CAP_BITS                         10
-#define ED25519_PUBLIC_KEY_BYTES            32
-#define ED25519_SIGNATURE_BYTES             64
-#define MAX_ACCESS_RIGHTS                   MICROKIT_MAX_CHANNELS * 3
-#define MAX_MAPPINGS                        MICROKIT_MAX_CHANNELS
-
-// Maximum size calculations
-#define SYSTEM_HASH_SIZE                    sizeof(seL4_Word)
-#define NUM_ENTRIES_SIZE                    sizeof(uint32_t)
-#define ACCESS_RIGHT_ENTRY_SIZE             9 // 1 byte for type + 8 bytes for data
-
-// Access types
-typedef enum {
-    ACCESS_TYPE_CHANNEL = 0x01,
-    ACCESS_TYPE_IRQ     = 0x02,
-    ACCESS_TYPE_MEMORY  = 0x03
-} AccessType;
-
-// Structure to hold each access right entry
-typedef struct {
-    AccessType type;
-    seL4_Word data; // For CHANNEL and IRQ: ID; For MEMORY: VADDR
-} AccessRightEntry;
-
-// Structure to hold all access rights
-typedef struct {
-    seL4_Word system_hash;
-    uint32_t num_entries;
-    AccessRightEntry entries[MAX_ACCESS_RIGHTS];
-} AccessRights;
-
-// Structure for memory mapping
-typedef struct {
-    seL4_Word vaddr;
-    seL4_Word page;
-    seL4_Word number_of_pages;
-    seL4_Word page_size;
-    seL4_Word rights;
-    seL4_Word attrs;
-} MemoryMapping;
+#define CHILD_ID                1
+#define CHILD_CSPACE_CAP        8
+#define PD_TEMPLATE_CNODE_ROOT  586
 
 // Public key for verifying signatures (256-bit for Ed25519)
 // Initialize with zeros; should be patched externally with the actual public key
-unsigned char public_key[ED25519_PUBLIC_KEY_BYTES];
+unsigned char public_key[PUBLIC_KEY_BYTES];
 
 // Global variables (patched externally)
 seL4_Word channels[MICROKIT_MAX_CHANNELS];
 seL4_Word irqs[MICROKIT_MAX_CHANNELS];
-MemoryMapping mappings[MAX_MAPPINGS];
+MemoryMapping mappings[MICROKIT_MAX_CHANNELS];
 uintptr_t user_program;
 uintptr_t trampoline_elf;
 uintptr_t trampoline_exec;
@@ -85,24 +39,6 @@ uintptr_t shared1;
 uintptr_t shared2;
 uintptr_t shared3;
 seL4_Word system_hash;
-
-#define TSLDR_MD_SIZE 0x1000
-typedef struct {
-    seL4_Word system_hash;
-    unsigned char public_key[ED25519_PUBLIC_KEY_BYTES];
-    seL4_Word channels[MICROKIT_MAX_CHANNELS];
-    seL4_Word irqs[MICROKIT_MAX_CHANNELS];
-    MemoryMapping mappings[MICROKIT_MAX_CHANNELS];
-    /* for recording ... */
-    bool init;
-    uint8_t padding[TSLDR_MD_SIZE
-                    - ( sizeof(seL4_Word) 
-                      + ED25519_PUBLIC_KEY_BYTES 
-                      + sizeof(seL4_Word) * MICROKIT_MAX_CHANNELS 
-                      + sizeof(seL4_Word) * MICROKIT_MAX_CHANNELS 
-                      + sizeof(MemoryMapping) * MICROKIT_MAX_CHANNELS
-                      + sizeof(bool) )];
-} tsldr_md_t;
 
 /* 4KB in size */
 uintptr_t tsldr_metadata;
