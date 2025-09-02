@@ -145,6 +145,10 @@ typedef struct {
 } trusted_loader_t;
 
 
+
+MemoryMapping *tsldr_find_mapping_by_vaddr(trusted_loader_t *loader, seL4_Word vaddr, bool sldr, void *data);
+
+
 seL4_Error tsldr_parse_rights(Elf64_Ehdr *ehdr, char *ref_section[], seL4_Word *size);
 
 /**

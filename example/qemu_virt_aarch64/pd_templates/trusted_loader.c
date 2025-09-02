@@ -20,8 +20,6 @@
 
 #define PROGNAME "[trusted_loader] "
 
-// Child PD caps
-#define CHILD_ID                            1
 #define CHILD_CSPACE_CAP                    8
 #define CHILD_VSPACE_CAP                    9
 #define CHILD_BASE_OUTPUT_NOTIFICATION_CAP  394
@@ -163,47 +161,18 @@ seL4_MessageInfo_t monitor_call_debute(void)
     microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
 
     // Restart the child PD at the entry point
-    microkit_pd_restart(CHILD_ID, ehdr->e_entry);
+    microkit_pd_restart(PD_TEMPLATE_CHILD_TCB, ehdr->e_entry);
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
     return microkit_msginfo_new(seL4_NoError, 0);
 }
 
 seL4_MessageInfo_t monitor_call_restart(void)
 {
-    /* bring back cap to background CNode and template PD CNode */
-    seL4_Error error = seL4_CNode_Copy(
-        CHILD_CSPACE_CAP,
-        589,
-        PD_CAP_BITS,
-        PD_TEMPLATE_CNODE_ROOT,
-        CHILD_CSPACE_CAP,
-        PD_CAP_BITS,
-        seL4_AllRights
-    );
-    if (error != seL4_NoError) {
-        microkit_dbg_printf(PROGNAME "Failed to restore CNode cap for the child\n");
-        return microkit_msginfo_new(error, 0);
-    }
-
-    error = seL4_CNode_Copy(
-        CHILD_CSPACE_CAP,
-        588,
-        PD_CAP_BITS,
-        PD_TEMPLATE_CNODE_ROOT,
-        587,
-        PD_CAP_BITS,
-        seL4_AllRights
-    );
-    if (error != seL4_NoError) {
-        microkit_dbg_printf(PROGNAME "Failed to restore background CNode cap for the child\n");
-        return microkit_msginfo_new(error, 0);
-    }
-
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
     /* set a flag for the trusted loader to check whether to boot or to restart... */
     microkit_dbg_printf(PROGNAME "Restart template PD without reloading trusted loader\n");
-    microkit_pd_restart(CHILD_ID, ehdr->e_entry);
+    microkit_pd_restart(PD_TEMPLATE_CHILD_TCB, ehdr->e_entry);
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
 
     return microkit_msginfo_new(seL4_NoError, 0);
@@ -332,22 +301,6 @@ static seL4_Error populate_rights(AccessRights* rights, const unsigned char *sig
 }
 
 /**
- * @brief Finds a memory mapping by virtual address.
- *
- * @param vaddr Virtual address to search for.
- * @return Pointer to the MemoryMapping if found, NULL otherwise.
- */
-static MemoryMapping* find_mapping_by_vaddr(seL4_Word vaddr)
-{
-    for (seL4_Word i = 0; i < MICROKIT_MAX_CHANNELS; i++) {
-        if (mappings[i].vaddr == vaddr) {
-            return &mappings[i];
-        }
-    }
-    return NULL;
-}
-
-/**
  * @brief Applies access rights to build allowed lists.
  *
  * @param rights Pointer to AccessRights structure.
@@ -385,7 +338,7 @@ static seL4_Error populate_allowed(const AccessRights *rights)
             case ACCESS_TYPE_MEMORY:
                 if (num_allowed_mappings < MAX_MAPPINGS) {
                     seL4_Word vaddr = entry->data;
-                    MemoryMapping *mapping = find_mapping_by_vaddr(vaddr);
+                    MemoryMapping *mapping = tsldr_find_mapping_by_vaddr(NULL, vaddr, false, mappings);
                     if (mapping != NULL) {
                         allowed_mappings[num_allowed_mappings++] = *mapping;
                         microkit_dbg_printf(PROGNAME "Allowed memory vaddr: 0x%x\n", (unsigned long long)vaddr);

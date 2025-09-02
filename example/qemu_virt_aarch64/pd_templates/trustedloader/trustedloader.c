@@ -1,29 +1,43 @@
 
 #include <libtrustedlo.h>
 #include <string.h>
-#include <elf_utils.h>
 
 #define LIB_NAME_MACRO "<libtrustedlo> "
 
 extern uintptr_t tsldr_metadata;
 
-static MemoryMapping *find_mapping_by_vaddr(trusted_loader_t *loader, seL4_Word vaddr)
+MemoryMapping *tsldr_find_mapping_by_vaddr(trusted_loader_t *loader, seL4_Word vaddr, bool sldr, void *data)
 {
-    if (!loader) {
-        microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
+    if (!data) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Invalid data pointer given\n");
         return NULL;
     }
-    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
-    if (md->init != true || loader->init != true) {
-        microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
-        return NULL;
-    }
-
-    for (seL4_Word i = 0; i < MICROKIT_MAX_CHANNELS; i++) {
-        if (md->mappings[i].vaddr == vaddr) {
-            return &md->mappings[i];
+    /* self-loading */
+    if (sldr) {
+        if (!loader) {
+            microkit_dbg_printf(LIB_NAME_MACRO "Invalid loader pointer given\n");
+            return NULL;
+        }
+        /* tsldr metadata */
+        tsldr_md_t *md = (tsldr_md_t *)data;
+        if (md->init != true || loader->init != true) {
+            microkit_dbg_printf(LIB_NAME_MACRO "Uninitialised trusted loader\n");
+            return NULL;
+        }
+        for (seL4_Word i = 0; i < MICROKIT_MAX_CHANNELS; i++) {
+            if (md->mappings[i].vaddr == vaddr) {
+                return &md->mappings[i];
+            }
+        }
+    } else { /* loading from monitor */
+        MemoryMapping *mappings = (MemoryMapping *)data;
+        for (seL4_Word i = 0; i < MICROKIT_MAX_CHANNELS; i++) {
+            if (mappings[i].vaddr == vaddr) {
+                return mappings + i;
+            }
         }
     }
+
     return NULL;
 }
 
@@ -208,7 +222,7 @@ seL4_Error tsldr_populate_allowed(trusted_loader_t *loader)
             case ACCESS_TYPE_MEMORY:
                 if (loader->num_allowed_mappings < MICROKIT_MAX_CHANNELS) {
                     seL4_Word vaddr = entry->data;
-                    MemoryMapping *mapping = find_mapping_by_vaddr(loader, vaddr);
+                    MemoryMapping *mapping = tsldr_find_mapping_by_vaddr(loader, vaddr, true, (void *)tsldr_metadata);
                     if (mapping != NULL) {
                         loader->allowed_mappings[loader->num_allowed_mappings++] = *mapping;
                         microkit_dbg_printf(LIB_NAME_MACRO "Allowed memory vaddr: 0x%x\n", (unsigned long long)vaddr);
