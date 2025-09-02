@@ -67,6 +67,15 @@ _Static_assert(sizeof(tsldr_md_t) == TSLDR_MD_SIZE,
 
 #define PD_CAP_BITS     10
 
+/* access to child TCB from monitor */
+#define PD_TEMPLATE_CHILD_TCB   1
+/* for monitor to access the cnode of container */
+#define PD_TEMPLATE_CHILD_CNODE 8
+/* for monitor to access it's own cspace */
+#define PD_TEMPLATE_CNODE_ROOT  586
+/* for monitor to access the background CNode of its child */
+#define PD_TEMPLATE_CBG_CNODE   587
+
 #define CNODE_BACKGROUND_CAP    588
 #define CNODE_SELF_CAP          589
 #define CNODE_NTFN_BASE_CAP     (10)
@@ -175,3 +184,7 @@ seL4_Error tsldr_loading_epilogue(uintptr_t client_exec, uintptr_t client_stack)
 
 
 seL4_Error tsldr_loading_prologue(trusted_loader_t *loader);
+
+/* grant access to the child's cspaces from the monitor's view */
+seL4_Error tsldr_grant_cspace_access(void);
+

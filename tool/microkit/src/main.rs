@@ -2644,37 +2644,37 @@ fn build_system(
                                 badge: 0,
                             },
                         ));
-                        let bg_cnode_cap_idx = PD_TEMPLATE_BACKGROUND_CNODE;
-                        assert!(bg_cnode_cap_idx < PD_CAP_SIZE);
-                        system_invocations.push(Invocation::new(
-                            config,
-                            InvocationArgs::CnodeMint {
-                                cnode: cnode_objs[maybe_child_idx].cap_addr,
-                                dest_index: bg_cnode_cap_idx,
-                                dest_depth: PD_CAP_BITS,
-                                src_root: root_cnode_cap,
-                                src_obj: bg_cnode_objs[maybe_child_idx].cap_addr,
-                                src_depth: config.cap_address_bits,
-                                rights: Rights::All as u64,
-                                badge: 0,
-                            },
-                        ));
+                        //let bg_cnode_cap_idx = PD_TEMPLATE_BACKGROUND_CNODE;
+                        //assert!(bg_cnode_cap_idx < PD_CAP_SIZE);
+                        //system_invocations.push(Invocation::new(
+                        //    config,
+                        //    InvocationArgs::CnodeMint {
+                        //        cnode: cnode_objs[maybe_child_idx].cap_addr,
+                        //        dest_index: bg_cnode_cap_idx,
+                        //        dest_depth: PD_CAP_BITS,
+                        //        src_root: root_cnode_cap,
+                        //        src_obj: bg_cnode_objs[maybe_child_idx].cap_addr,
+                        //        src_depth: config.cap_address_bits,
+                        //        rights: Rights::All as u64,
+                        //        badge: 0,
+                        //    },
+                        //));
 
-                        let child_cnode_cap_idx = PD_TEMPLATE_CHILD_CNODE;
-                        assert!(child_cnode_cap_idx < PD_CAP_SIZE);
-                        system_invocations.push(Invocation::new(
-                            config,
-                            InvocationArgs::CnodeMint {
-                                cnode: cnode_objs[maybe_child_idx].cap_addr,
-                                dest_index: child_cnode_cap_idx,
-                                dest_depth: PD_CAP_BITS,
-                                src_root: root_cnode_cap,
-                                src_obj: cnode_objs[maybe_child_idx].cap_addr,
-                                src_depth: config.cap_address_bits,
-                                rights: Rights::All as u64,
-                                badge: 0,
-                            },
-                        ));
+                        //let child_cnode_cap_idx = PD_TEMPLATE_CHILD_CNODE;
+                        //assert!(child_cnode_cap_idx < PD_CAP_SIZE);
+                        //system_invocations.push(Invocation::new(
+                        //    config,
+                        //    InvocationArgs::CnodeMint {
+                        //        cnode: cnode_objs[maybe_child_idx].cap_addr,
+                        //        dest_index: child_cnode_cap_idx,
+                        //        dest_depth: PD_CAP_BITS,
+                        //        src_root: root_cnode_cap,
+                        //        src_obj: cnode_objs[maybe_child_idx].cap_addr,
+                        //        src_depth: config.cap_address_bits,
+                        //        rights: Rights::All as u64,
+                        //        badge: 0,
+                        //    },
+                        //));
 
                         // Now do the VSpace as well
                         let vspace_cap_idx = CHILD_VSPACE_CAP_IDX;

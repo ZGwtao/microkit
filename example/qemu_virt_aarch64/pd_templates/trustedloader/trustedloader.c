@@ -586,3 +586,36 @@ seL4_Error tsldr_loading_prologue(trusted_loader_t *loader)
 
     return seL4_NoError;
 }
+
+seL4_Error tsldr_grant_cspace_access(void)
+{
+    /* bring back cap to background CNode and template PD CNode */
+    seL4_Error error = seL4_CNode_Copy(
+        PD_TEMPLATE_CHILD_CNODE,
+        CNODE_SELF_CAP, /* self means the child itself */
+        PD_CAP_BITS,
+        PD_TEMPLATE_CNODE_ROOT,
+        PD_TEMPLATE_CHILD_CNODE,
+        PD_CAP_BITS,
+        seL4_AllRights
+    );
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to restore CNode cap for the child\n");
+        return error;
+    }
+
+    error = seL4_CNode_Copy(
+        PD_TEMPLATE_CHILD_CNODE,
+        CNODE_BACKGROUND_CAP,  /* the background CNode in the container's CNode */
+        PD_CAP_BITS,
+        PD_TEMPLATE_CNODE_ROOT,
+        PD_TEMPLATE_CBG_CNODE, /* the background CNode in the monitor's CNode */
+        PD_CAP_BITS,
+        seL4_AllRights
+    );
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Failed to restore background CNode cap for the child\n");
+        return error;
+    }
+    return seL4_NoError;
+}

@@ -91,6 +91,11 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 
 seL4_MessageInfo_t monitor_call_debute(void)
 {
+    seL4_Error error = tsldr_grant_cspace_access();
+    if (error != seL4_NoError) {
+        return microkit_msginfo_new(error, 0);
+    }
+
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
     if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
@@ -123,32 +128,8 @@ seL4_MessageInfo_t monitor_call_restart(void)
     /* init metadata for proto-container's tsldr */
     tsldr_init_metadata();
 
-    /* bring back cap to background CNode and template PD CNode */
-    seL4_Error error = seL4_CNode_Copy(
-        CHILD_CSPACE_CAP,
-        589,
-        PD_CAP_BITS,
-        PD_TEMPLATE_CNODE_ROOT,
-        CHILD_CSPACE_CAP,
-        PD_CAP_BITS,
-        seL4_AllRights
-    );
+    seL4_Error error = tsldr_grant_cspace_access();
     if (error != seL4_NoError) {
-        microkit_dbg_printf(PROGNAME "Failed to restore CNode cap for the child\n");
-        return microkit_msginfo_new(error, 0);
-    }
-
-    error = seL4_CNode_Copy(
-        CHILD_CSPACE_CAP,
-        588,
-        PD_CAP_BITS,
-        PD_TEMPLATE_CNODE_ROOT,
-        587,
-        PD_CAP_BITS,
-        seL4_AllRights
-    );
-    if (error != seL4_NoError) {
-        microkit_dbg_printf(PROGNAME "Failed to restore background CNode cap for the child\n");
         return microkit_msginfo_new(error, 0);
     }
 
