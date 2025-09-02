@@ -51,3 +51,11 @@ _test:
 .incbin TEST_PATH
 _test_end:
 #endif
+
+#if defined(CONTAINER_PATH)
+.section .container, "aw", @progbits
+.global _container, _container_end
+_container:
+.incbin CONTAINER_PATH
+_container_end:
+#endif
