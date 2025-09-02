@@ -6,14 +6,8 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#include <stdbool.h>
-#include <stddef.h>
-#include <stdint.h>
-#include <stdarg.h>
 #include <microkit.h>
-#include "ed25519.h"
-#include "elf.h"
-#include "elf_utils.h"
+#include <elf_utils.h>
 #include <libtrustedlo.h>
 
 #define PROGNAME "[container monitor] "
@@ -22,10 +16,6 @@
 #define CHILD_ID                1
 #define CHILD_CSPACE_CAP        8
 #define PD_TEMPLATE_CNODE_ROOT  586
-
-// Public key for verifying signatures (256-bit for Ed25519)
-// Initialize with zeros; should be patched externally with the actual public key
-unsigned char public_key[PUBLIC_KEY_BYTES];
 
 // Global variables (patched externally)
 seL4_Word channels[MICROKIT_MAX_CHANNELS];
@@ -39,6 +29,7 @@ uintptr_t shared1;
 uintptr_t shared2;
 uintptr_t shared3;
 seL4_Word system_hash;
+unsigned char public_key[PUBLIC_KEY_BYTES];
 
 /* 4KB in size */
 uintptr_t tsldr_metadata;
