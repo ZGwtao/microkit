@@ -107,8 +107,6 @@ typedef struct {
 /* 4KB in size */
 uintptr_t tsldr_metadata;
 
-static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr);
-
 seL4_MessageInfo_t monitor_call_debute(void);
 seL4_MessageInfo_t monitor_call_restart(void);
 
@@ -278,32 +276,4 @@ seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo
 
     // Stop the thread explicitly; no need to reply to the fault
     return seL4_False;
-}
-
-/**
- * @brief Loads ELF segments into the child PD's memory.
- *
- * @param ehdr Pointer to ELF header.
- */
-static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
-{
-    Elf64_Phdr *phdr = (Elf64_Phdr *)((char*)ehdr + ehdr->e_phoff);
-
-    for (int i = 0; i < ehdr->e_phnum; i++) {
-        if (phdr[i].p_type != PT_LOAD) {
-            continue;
-        }
-
-        void *src = (char*)ehdr + phdr[i].p_offset;
-        void *dest = (void *)(dest_vaddr + phdr[i].p_vaddr - ehdr->e_entry);
-
-        custom_memcpy(dest, src, phdr[i].p_filesz);
-
-        if (phdr[i].p_memsz > phdr[i].p_filesz) {
-            seL4_Word bss_size = phdr[i].p_memsz - phdr[i].p_filesz;
-            custom_memset((char *)dest + phdr[i].p_filesz, 0, bss_size);
-        }
-    }
-
-    microkit_dbg_printf(PROGNAME "Loaded ELF segments into memory\n");
 }

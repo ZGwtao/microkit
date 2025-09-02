@@ -80,32 +80,6 @@ typedef void (*entry_fn_t)(void);
 
 trusted_loader_t loader;
 
-static void load_elf(void *dest_vaddr, const Elf64_Ehdr *ehdr)
-{
-    microkit_dbg_printf(PROGNAME "Start to load ELF segments into memory\n");
-
-    Elf64_Phdr *phdr = (Elf64_Phdr *)((char*)ehdr + ehdr->e_phoff);
-
-    /* the last section is access right table */
-    for (int i = 0; i < ehdr->e_phnum; i++) {
-        if (phdr[i].p_type != PT_LOAD) {
-            continue;
-        }
-
-        void *src = (char*)ehdr + phdr[i].p_offset;
-        void *dest = (void *)(dest_vaddr + phdr[i].p_vaddr - ehdr->e_entry);
-
-        custom_memcpy(dest, src, phdr[i].p_filesz);
-
-        if (phdr[i].p_memsz > phdr[i].p_filesz) {
-            seL4_Word bss_size = phdr[i].p_memsz - phdr[i].p_filesz;
-            custom_memset((char *)dest + phdr[i].p_filesz, 0, bss_size);
-        }
-    }
-
-    microkit_dbg_printf(PROGNAME "Loaded ELF segments into memory\n");
-}
-
 void init(void)
 {
     __sel4_ipc_buffer = (seL4_IPCBuffer *)0x100000;
