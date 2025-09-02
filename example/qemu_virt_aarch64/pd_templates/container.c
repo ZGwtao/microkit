@@ -8,7 +8,7 @@
 #include <stddef.h>
 #include <microkit.h>
 
-#define PROGNAME "[sender] "
+#define PROGNAME "[container] "
 
 void init(void)
 {

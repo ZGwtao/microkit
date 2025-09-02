@@ -34,7 +34,7 @@ include $(LIBTSLDR_SRC_DIR)/Makefile
 MONITOR_OBJS := container-monitor.o
 TRUSTED_LOADER_OBJS := trusted_loader.o
 PROTO_CONTAINER_OBJS := proto-container.o
-RECEIVER2_OBJS := receiver2.o
+CONTAINER_OBJS := container.o
 CLIENT_OBJS	:= client.o
 TRAMPOLINE_OBJS	:= trampoline.o
 TEST_OBJS	:= test.o
@@ -48,7 +48,7 @@ BOARD_DIR := $(MICROKIT_SDK)/board/$(MICROKIT_BOARD)/$(MICROKIT_CONFIG)
 
 # Patched ELF file names
 # PATCHED_PROTO_CONTAINER_ELF := $(BUILD_DIR)/proto-container_patched.elf
-PATCHED_RECEIVER2_ELF := $(BUILD_DIR)/receiver2_patched.elf
+PATCHED_CONTAINER_ELF := $(BUILD_DIR)/container_patched.elf
 PATCHED_CLIENT_ELF := $(BUILD_DIR)/client_patched.elf
 PATCHED_TEST_ELF := $(BUILD_DIR)/test_patched.elf
 
@@ -59,7 +59,7 @@ TEST_ELF := $(BUILD_DIR)/test.elf
 
 # Images to include patched ELF files
 IMAGES := $(BUILD_DIR)/trusted_loader.elf $(BUILD_DIR)/container-monitor.elf \
-			$(PROTO_CONTAINER_ELF) $(PATCHED_RECEIVER2_ELF) $(CLIENT_ELF) $(TEST_ELF) $(TRAMPOLINE_ELF) \
+			$(PROTO_CONTAINER_ELF) $(PATCHED_CONTAINER_ELF) $(CLIENT_ELF) $(TEST_ELF) $(TRAMPOLINE_ELF) \
 			$(BUILD_DIR)/frontend.elf $(BUILD_DIR)/sender_loader.elf
 
 # Private key file
@@ -109,7 +109,7 @@ $(BUILD_DIR)/%.o: %.s Makefile
 # $(PATCHED_PROTO_CONTAINER_ELF): $(BUILD_DIR)/proto-container.elf $(PRIVATE_KEY_FILE)
 #	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
-$(PATCHED_RECEIVER2_ELF): $(BUILD_DIR)/receiver2.elf $(PRIVATE_KEY_FILE)
+$(PATCHED_CONTAINER_ELF): $(BUILD_DIR)/container.elf $(PRIVATE_KEY_FILE)
 	$(PYTHON) patch_elf.py $< $(SYSTEM_HASH) -k $(PRIVATE_KEY_FILE)
 
 $(PATCHED_CLIENT_ELF): $(CLIENT_ELF) $(PRIVATE_KEY_FILE)
@@ -140,11 +140,11 @@ $(BUILD_DIR)/sender_loader.elf: $(BUILD_DIR)/$(SENDER_LOADER_OBJS) \
 
 # Link programs.o with patched ELF dependencies
 $(PACKAGE_PROGS_OBJS): package_programs.S $(PROTO_CONTAINER_ELF) \
-						$(PATCHED_RECEIVER2_ELF) $(PATCHED_CLIENT_ELF) $(PATCHED_TEST_ELF) \
+						$(PATCHED_CONTAINER_ELF) $(PATCHED_CLIENT_ELF) $(PATCHED_TEST_ELF) \
 						$(TRAMPOLINE_ELF)
 	$(CC) -c -g3 -x assembler-with-cpp \
 		-DPROTO_CONTAINER_PATH=\"$(PROTO_CONTAINER_ELF)\" \
-		-DCONTAINER_PATH=\"$(PATCHED_RECEIVER2_ELF)\" \
+		-DCONTAINER_PATH=\"$(PATCHED_CONTAINER_ELF)\" \
 		-DCLIENT_PATH=\"$(PATCHED_CLIENT_ELF)\" \
 		-DTEST_PATH=\"$(PATCHED_TEST_ELF)\" \
 		-DTRAMPOLINE_PATH=\"$(TRAMPOLINE_ELF)\" \
@@ -158,8 +158,8 @@ $(PROTO_CONTAINER_ELF): $(BUILD_DIR)/$(PROTO_CONTAINER_OBJS) \
 		--defsym loader=0xE00000 \
 		$^ $(LIBS) -o $@
 
-# Link receiver2.elf
-$(BUILD_DIR)/receiver2.elf: $(BUILD_DIR)/$(RECEIVER2_OBJS) \
+# Link container.elf
+$(BUILD_DIR)/container.elf: $(BUILD_DIR)/$(CONTAINER_OBJS) \
                             ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
