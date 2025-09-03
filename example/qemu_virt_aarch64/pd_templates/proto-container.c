@@ -78,8 +78,11 @@ uintptr_t container_stack_top   = (0x0FFFFC00000);
 
 typedef void (*entry_fn_t)(void);
 
-/* 0xE00000 */
-static trusted_loader_t loader;
+/*
+ * vaddr: 0xE00000
+ * Should not be static because it needs to be patched externally
+ */
+trusted_loader_t loader_context;
 
 
 void init(void)
@@ -93,15 +96,15 @@ void init(void)
         microkit_internal_crash(-1);
     }
 
-    tsldr_loading_prologue(&loader);
+    tsldr_loading_prologue(&loader_context);
 
     /* initialise the real trusted loader... */
-    if (loader.flags.init != true) {
+    if (loader_context.flags.init != true) {
         microkit_dbg_printf(PROGNAME "--> Init loader context\n");
-        tsldr_init(&loader, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
-        custom_memcpy(loader.public_key, md->public_key, sizeof(md->public_key));
+        tsldr_init(&loader_context, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
+        custom_memcpy(loader_context.public_key, md->public_key, sizeof(md->public_key));
         /* loader is now initialised... */
-        loader.flags.init = true;
+        loader_context.flags.init = true;
     }
 
     seL4_Error error;
@@ -137,21 +140,21 @@ void init(void)
     }
 
     /* populate the access rights to the loader */
-    error = tsldr_populate_rights(&loader, (unsigned char *)section, section_size);
+    error = tsldr_populate_rights(&loader_context, (unsigned char *)section, section_size);
     if (error) {
         microkit_internal_crash(-1);
     }
     microkit_dbg_printf(PROGNAME "Finished up access rights integrity checking\n");
 
-    tsldr_restore_caps(&loader);
+    tsldr_restore_caps(&loader_context);
 
     /* (really) populate allowed access rights */
-    error = tsldr_populate_allowed(&loader);
+    error = tsldr_populate_allowed(&loader_context);
     if (error != seL4_NoError) {
         microkit_internal_crash(-1);
     }
 
-    tsldr_remove_caps(&loader);
+    tsldr_remove_caps(&loader_context);
 
     tsldr_loading_epilogue(container_exec, (uintptr_t)0x0);
 

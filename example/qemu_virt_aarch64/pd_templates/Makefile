@@ -155,7 +155,7 @@ $(PROTO_CONTAINER_ELF): $(BUILD_DIR)/$(PROTO_CONTAINER_OBJS) \
                             ${LIBEXTELF} $(LIBCRYPTO) $(LIBTSLDR)
 	$(LD) $(LDFLAGS) \
 		--defsym __sel4_ipc_buffer=0x100000 \
-		--defsym loader=0xE00000 \
+		--defsym loader_context=0xE00000 \
 		$^ $(LIBS) -o $@
 
 # Link container.elf
