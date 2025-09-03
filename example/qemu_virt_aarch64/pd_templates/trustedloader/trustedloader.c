@@ -245,6 +245,14 @@ seL4_Error tsldr_populate_allowed(trusted_loader_t *loader)
     return seL4_NoError;
 }
 
+void tsldr_init_metadata(tsldr_md_t *tsldr_metadata_patched)
+{
+    /* initialise trusted loader metadata */
+    custom_memset((tsldr_md_t *)tsldr_metadata, 0, sizeof(tsldr_md_t));
+    custom_memcpy((tsldr_md_t *)tsldr_metadata, tsldr_metadata_patched, sizeof(tsldr_md_t));
+    ((tsldr_md_t *)tsldr_metadata)->init = true;
+}
+
 void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_val, size_t hash_len, size_t signature_len)
 {
     if (!loader) {

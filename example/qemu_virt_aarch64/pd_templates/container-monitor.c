@@ -29,24 +29,15 @@ seL4_Word system_hash;
 unsigned char public_key[PUBLIC_KEY_BYTES];
 
 /* 4KB in size */
+tsldr_md_t tsldr_metadata_patched;
+/*
+ * A shared memory region with container, containing content from tsldr_metadata_patched
+ * Will be init each time the container restarts by copying the data from above
+ */
 uintptr_t tsldr_metadata;
 
 seL4_MessageInfo_t monitor_call_debute(void);
 seL4_MessageInfo_t monitor_call_restart(void);
-
-static void tsldr_init_metadata(void)
-{
-    /* initialise trusted loader metadata */
-    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
-    custom_memset((void *)md, 0, sizeof(tsldr_md_t));
-
-    md->system_hash = system_hash;
-    custom_memcpy(md->public_key, public_key, sizeof(md->public_key));
-    custom_memcpy(md->channels,   channels,   sizeof(md->channels));
-    custom_memcpy(md->irqs,       irqs,       sizeof(md->irqs));
-    custom_memcpy(md->mappings,   mappings,   sizeof(md->mappings));
-    md->init = true;
-}
 
 void init(void)
 {
@@ -105,7 +96,7 @@ seL4_MessageInfo_t monitor_call_debute(void)
     microkit_dbg_printf(PROGNAME "Verified ELF header\n");
 
     /* init metadata for proto-container's tsldr */
-    tsldr_init_metadata();
+    tsldr_init_metadata(&tsldr_metadata_patched);
 
     load_elf((void*)trusted_loader_exec, ehdr);
     microkit_dbg_printf(PROGNAME "Copied trusted loader to child PD's memory region\n");
@@ -125,7 +116,7 @@ seL4_MessageInfo_t monitor_call_debute(void)
 seL4_MessageInfo_t monitor_call_restart(void)
 {
     /* init metadata for proto-container's tsldr */
-    tsldr_init_metadata();
+    tsldr_init_metadata(&tsldr_metadata_patched);
 
     seL4_Error error = tsldr_grant_cspace_access();
     if (error != seL4_NoError) {

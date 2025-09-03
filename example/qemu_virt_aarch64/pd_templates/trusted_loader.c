@@ -41,6 +41,8 @@
 /* dummy def */
 uintptr_t tsldr_metadata;
 
+tsldr_md_t tsldr_metadata_patched;
+
 // Public key for verifying signatures (256-bit for Ed25519)
 // Initialize with zeros; should be patched externally with the actual public key
 unsigned char public_key[ED25519_PUBLIC_KEY_BYTES];
@@ -72,10 +74,20 @@ static void restore_caps();
 seL4_MessageInfo_t monitor_call_debute(void);
 seL4_MessageInfo_t monitor_call_restart(void);
 
+/* trusted loader context */
+//static trusted_loader_t loader;
+
+
 void init(void)
 {
+    tsldr_init_metadata(&tsldr_metadata_patched);
     microkit_dbg_printf(PROGNAME "Entered init\n");
     microkit_dbg_printf(PROGNAME "System hash: 0x%x\n", (unsigned long long)system_hash);
+#if 0
+    tsldr_init(&loader, ed25519_verify, system_hash, sizeof(seL4_Word), 64);
+    custom_memcpy(loader.public_key, public_key, sizeof(public_key));
+    loader.flags.init = true;
+#endif
     microkit_dbg_printf(PROGNAME "Finished init\n");
 }
 

@@ -165,6 +165,9 @@ seL4_Error tsldr_populate_rights(trusted_loader_t *loader, const unsigned char *
  */
 seL4_Error tsldr_populate_allowed(trusted_loader_t *loader);
 
+
+void tsldr_init_metadata(tsldr_md_t *tsldr_metadata_patched);
+
 /**
  * @brief Initialise a trusted loader
  *

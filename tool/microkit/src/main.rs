@@ -519,6 +519,66 @@ struct BuiltSystem {
     initial_task_phys_region: MemoryRegion,
 }
 
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct MemoryMapping {
+    pub vaddr: u64,
+    pub page: u64,
+    pub number_of_pages: u64,
+    pub page_size: u64,
+    pub rights: u64,
+    pub attrs: u64,
+}
+impl Default for MemoryMapping {
+    fn default() -> Self {
+        MemoryMapping {
+            vaddr: 0,
+            page: 0,
+            number_of_pages: 0,
+            page_size: 0,
+            rights: 0,
+            attrs: 0,
+        }
+    }
+}
+
+#[repr(C)]
+pub struct TsldrMd {
+    pub system_hash: u64,
+    pub public_key: [u8; 32],
+    pub channels: [u64; 62],
+    pub irqs: [u64; 62],
+    pub mappings: [MemoryMapping; 62],
+    pub init: u8,
+    pub padding: [u8; 4096
+        - (std::mem::size_of::<u64>()
+           + 32
+           + std::mem::size_of::<u64>() * 62   // channels
+           + std::mem::size_of::<u64>() * 62   // irqs
+           + std::mem::size_of::<MemoryMapping>() * 62
+           + std::mem::size_of::<u8>())],                         // init
+}
+impl Default for TsldrMd {
+    fn default() -> Self {
+        TsldrMd {
+            system_hash: 0,
+            public_key: [0u8; 32],
+            channels: [0u64; 62],
+            irqs: [0u64; 62],
+            mappings: [MemoryMapping::default(); 62],
+            init: 0,
+            padding: [0u8; 4096
+                - (std::mem::size_of::<u64>()
+                + 32
+                + std::mem::size_of::<u64>() * 62
+                + std::mem::size_of::<u64>() * 62
+                + std::mem::size_of::<MemoryMapping>() * 62
+                + std::mem::size_of::<u8>())],
+        }
+    }
+}
+
+
 pub fn pd_write_symbols(
     pds: &[ProtectionDomain],
     channels: &[Channel],
@@ -526,6 +586,7 @@ pub fn pd_write_symbols(
     pd_setvar_values: &[Vec<u64>],
     pd_optional_mappings: &HashMap<usize, Vec<OptionalMapping>>,
     public_key: Option<&[u8]>,
+    system_hash: u64,
 ) -> Result<(), String> {
     for (pd_idx, pd) in pds.iter().enumerate() {
         let Some(program_image) = &pd.program_image else {
@@ -539,6 +600,7 @@ pub fn pd_write_symbols(
         elf.write_symbol("microkit_passive", &[pd.passive as u8])?;
 
         if pd.is_template {
+            let mut md = TsldrMd::default();
             let mut channels_to_remove = [0u64; MAX_CHANNELS];
             let mut irqs_to_remove = [0u64; MAX_CHANNELS];
             let mut mappings_to_remove = [OptionalMapping::default(); MAX_CHANNELS];
@@ -589,15 +651,32 @@ pub fn pd_write_symbols(
                 irqs_to_remove[irq.id as usize] = 1;
             }
 
-            elf.write_symbol("channels", unsafe { struct_to_bytes(&channels_to_remove) })?;
-            elf.write_symbol("irqs", unsafe { struct_to_bytes(&irqs_to_remove) })?;
-            elf.write_symbol("mappings", unsafe { struct_to_bytes(&mappings_to_remove) })?;
+            //elf.write_symbol("channels", unsafe { struct_to_bytes(&channels_to_remove) })?;
+            //elf.write_symbol("irqs", unsafe { struct_to_bytes(&irqs_to_remove) })?;
+            //elf.write_symbol("mappings", unsafe { struct_to_bytes(&mappings_to_remove) })?;
+            md.channels.copy_from_slice(&channels_to_remove);
+            md.irqs.copy_from_slice(&irqs_to_remove);
+            md.system_hash = system_hash;
 
-            if let Some(pk) = public_key {
-                elf.write_symbol("public_key", pk)?;
-                let pk_hex = pk.iter().map(|byte| format!("{:02x}", byte)).collect::<String>();
-                println!("Public key written to PD '{}' (length {} bytes): 0x{}", pd.name, pk.len(), pk_hex);
+            for (i, om) in mappings_to_remove.iter().enumerate() {
+                md.mappings[i] = MemoryMapping {
+                    vaddr: om.vaddr,
+                    page: om.page,
+                    number_of_pages: om.number_of_pages,
+                    page_size: om.page_size,
+                    rights: om.rights,
+                    attrs: om.attrs,
+                };
             }
+            if let Some(pk) = public_key {
+                md.public_key[..pk.len()].copy_from_slice(pk);
+                let pk_hex = pk.iter().map(|byte| format!("{:02x}", byte)).collect::<String>();
+                println!(
+                    "Public key written to PD '{}' (length {} bytes): 0x{}",
+                    pd.name, pk.len(), pk_hex
+                );
+            }
+            elf.write_symbol("tsldr_metadata_patched", unsafe { struct_to_bytes(&md) })?;
         }
 
         for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {
@@ -4241,6 +4320,7 @@ fn main() -> Result<(), String> {
         &built_system.pd_setvar_values,
         &built_system.pd_optional_mappings,
         public_key_bytes.as_deref(),
+        system_hash,
     )?;
 
     // Generate the report
