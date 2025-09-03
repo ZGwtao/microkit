@@ -25,8 +25,8 @@ tsldr_md_t *tsldr_metadata;
 /* ? */
 static tsldr_md_t tsldr_monitor_metadata;
 
-uintptr_t user_program;
-uintptr_t client_program;
+uintptr_t container_exec;
+uintptr_t container_elf;
 uintptr_t shared1;
 uintptr_t shared2;
 
@@ -120,11 +120,8 @@ seL4_MessageInfo_t monitor_call_debute(void)
     }
     tsldr_remove_caps(&loader_context, false);
 
-    load_elf((void*)user_program, ehdr);
+    load_elf((void*)container_exec, ehdr);
     microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
-
-    custom_memcpy((void*)client_program, (char *)shared2, 0x800000);
-    microkit_dbg_printf(PROGNAME "Copied client program to child PD's memory region\n");
 
     // Restart the child PD at the entry point
     microkit_pd_restart(PD_TEMPLATE_CHILD_TCB, ehdr->e_entry);
