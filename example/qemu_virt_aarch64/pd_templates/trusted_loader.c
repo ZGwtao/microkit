@@ -12,82 +12,46 @@
 #include <stdarg.h>
 
 #include <microkit.h>
-
-#include "ed25519.h"
-#include "elf.h"
-#include "elf_utils.h"
+#include <ed25519.h>
+#include <elf_utils.h>
 #include <libtrustedlo.h>
 
 #define PROGNAME "[trusted_loader] "
 
-#define CHILD_CSPACE_CAP                    8
-#define CHILD_VSPACE_CAP                    9
-#define CHILD_BASE_OUTPUT_NOTIFICATION_CAP  394
-#define CHILD_BASE_IRQ_CAP                  458
-#define CHILD_BASE_MAPPING_CAP              522
-#define PD_TEMPLATE_CNODE_ROOT              586
-
-#define PD_CAP_BITS                         10
-#define ED25519_PUBLIC_KEY_BYTES            32
-#define ED25519_SIGNATURE_BYTES             64
-#define MAX_ACCESS_RIGHTS                   MICROKIT_MAX_CHANNELS * 3
-#define MAX_MAPPINGS                        MICROKIT_MAX_CHANNELS
-
-// Maximum size calculations
-#define SYSTEM_HASH_SIZE                    sizeof(seL4_Word)
-#define NUM_ENTRIES_SIZE                    sizeof(uint32_t)
-#define ACCESS_RIGHT_ENTRY_SIZE             9 // 1 byte for type + 8 bytes for data
-
-/* dummy def */
-uintptr_t tsldr_metadata;
-
+/* patched externally by microkit tool */
 tsldr_md_t tsldr_metadata_patched;
+/* dummy def */
+tsldr_md_t *tsldr_metadata;
+/* ? */
+static tsldr_md_t tsldr_monitor_metadata;
 
-// Public key for verifying signatures (256-bit for Ed25519)
-// Initialize with zeros; should be patched externally with the actual public key
-unsigned char public_key[ED25519_PUBLIC_KEY_BYTES];
-
-// Global variables (patched externally)
-seL4_Word channels[MICROKIT_MAX_CHANNELS];
-seL4_Word irqs[MICROKIT_MAX_CHANNELS];
-MemoryMapping mappings[MAX_MAPPINGS];
 uintptr_t user_program;
 uintptr_t client_program;
 uintptr_t shared1;
 uintptr_t shared2;
+
 seL4_Word system_hash;
+unsigned char public_key[PUBLIC_KEY_BYTES];
 
-// Global variables
-static AccessRights access_rights = {0};
-static bool allowed_channels[MICROKIT_MAX_CHANNELS] = {false};
-static bool allowed_irqs[MICROKIT_MAX_CHANNELS] = {false};
-static MemoryMapping allowed_mappings[MAX_MAPPINGS] = {0};
-static int num_allowed_mappings = 0;
-static bool removed_caps = false;
-
-// Function prototypes
-static seL4_Error populate_rights(AccessRights *rights, const unsigned char *verified_data, size_t verified_data_len);
-static seL4_Error populate_allowed(const AccessRights *rights);
-static MemoryMapping* find_mapping_by_vaddr(seL4_Word vaddr);
-static void remove_caps();
-static void restore_caps();
 seL4_MessageInfo_t monitor_call_debute(void);
 seL4_MessageInfo_t monitor_call_restart(void);
 
 /* trusted loader context */
-//static trusted_loader_t loader;
+trusted_loader_t loader_context;
 
 
 void init(void)
 {
+    tsldr_metadata = &tsldr_monitor_metadata;
     tsldr_init_metadata(&tsldr_metadata_patched);
     microkit_dbg_printf(PROGNAME "Entered init\n");
-    microkit_dbg_printf(PROGNAME "System hash: 0x%x\n", (unsigned long long)system_hash);
-#if 0
-    tsldr_init(&loader, ed25519_verify, system_hash, sizeof(seL4_Word), 64);
-    custom_memcpy(loader.public_key, public_key, sizeof(public_key));
-    loader.flags.init = true;
-#endif
+
+    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+
+    tsldr_init(&loader_context, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
+    custom_memcpy(loader_context.public_key, md->public_key, sizeof(md->public_key));
+    loader_context.flags.init = true;
+
     microkit_dbg_printf(PROGNAME "Finished init\n");
 }
 
@@ -142,29 +106,19 @@ seL4_MessageInfo_t monitor_call_debute(void)
         microkit_internal_crash(error);
     }
 
-    // Verify the signature (only the relevant part of the section)
-    error = populate_rights(
-        &access_rights,                   // Pointer to AccessRights structure
-        (unsigned char*)section,          // Pointer to signature || data
-        section_size                      // Length of signed message
-    );
+    error = tsldr_populate_rights(&loader_context, (unsigned char *)section, section_size);
     if (error != seL4_NoError) {
         return microkit_msginfo_new(error, 0);
     }
 
-    // Restore deleted caps if a program has previously been loaded
-    // Must be done before allowed lists are populated
-    if (removed_caps) {
-        restore_caps();
-    }
+    tsldr_restore_caps(&loader_context, false);
 
-    error = populate_allowed(&access_rights);
+    //error = populate_allowed(&access_rights);
+    error = tsldr_populate_allowed(&loader_context);
     if (error != seL4_NoError) {
         return microkit_msginfo_new(error, 0);
     }
-
-    remove_caps();
-    removed_caps = true;
+    tsldr_remove_caps(&loader_context, false);
 
     load_elf((void*)user_program, ehdr);
     microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
@@ -210,303 +164,4 @@ seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo
 
     // Stop the thread explicitly; no need to reply to the fault
     return seL4_False;
-}
-
-/**
- * @brief Populates access rights and verifies the Ed25519 signature of the data.
- *
- * @param rights Pointer to the AccessRights structure to be populated.
- * @param signed_message Pointer to the signed message (signature || data).
- * @param signed_message_len Length of the signed message in bytes.
- * @return true if the signature is valid, false otherwise.
- */
-static seL4_Error populate_rights(AccessRights* rights, const unsigned char *signed_message, size_t signed_message_len)
-{
-    custom_memset(&access_rights, 0, sizeof(AccessRights));
-
-    // Calculate the minimum required size: signature + system_hash + num_access_rights
-    size_t min_required_size = ED25519_SIGNATURE_BYTES + SYSTEM_HASH_SIZE + NUM_ENTRIES_SIZE;
-    
-    if (signed_message_len < min_required_size) {
-        microkit_dbg_printf(PROGNAME "Signed message length (%d) is too short. Minimum required: %d bytes.\n",
-                           signed_message_len, min_required_size);
-        return seL4_InvalidArgument;
-    }
-
-    // Extract signature and data
-    const unsigned char *signature = signed_message;
-    const unsigned char *data = signed_message + ED25519_SIGNATURE_BYTES;
-
-    // Parse system_hash and num_entries from the verified data
-    custom_memcpy(&rights->system_hash, data, SYSTEM_HASH_SIZE);
-    custom_memcpy(&rights->num_entries, data + SYSTEM_HASH_SIZE, NUM_ENTRIES_SIZE);
-
-    microkit_dbg_printf(PROGNAME "System hash (from access rights section of ELF file): 0x%x\n", rights->system_hash);
-    microkit_dbg_printf(PROGNAME "Number of access rights: %d\n", rights->num_entries);
-
-    // Check if the number of access rights exceeds the maximum allowed
-    if (rights->num_entries > MAX_ACCESS_RIGHTS) {
-        microkit_dbg_printf(PROGNAME "Number of access rights (%d) exceeds maximum allowed (%d)\n", rights->num_entries, MAX_ACCESS_RIGHTS);
-        return seL4_InvalidArgument;
-    }
-
-    // Verify system_hash matches
-    if (rights->system_hash != system_hash) {
-        microkit_dbg_printf(PROGNAME "System hash mismatch: expected 0x%x, found 0x%x\n",
-                           (unsigned long)system_hash,
-                           (unsigned long)rights->system_hash);
-        return seL4_InvalidArgument;
-    }
-
-    microkit_dbg_printf(PROGNAME "Extracted system hash and trusted loader's system hash matched successfully\n");
-
-    // Calculate the expected total size based on the number of access rights
-    size_t data_size = SYSTEM_HASH_SIZE + NUM_ENTRIES_SIZE + (rights->num_entries * ACCESS_RIGHT_ENTRY_SIZE);
-    
-    if (signed_message_len < ED25519_SIGNATURE_BYTES + data_size) {
-        microkit_dbg_printf(PROGNAME "Verified data size (%d) is less than expected size (%d)\n", signed_message_len, ED25519_SIGNATURE_BYTES + data_size);
-        return seL4_InvalidArgument;
-    }
-
-    // Print the public key in hex
-    microkit_dbg_printf(PROGNAME "Public key: 0x");
-    for (int i = 0; i < ED25519_PUBLIC_KEY_BYTES; i++) {
-        microkit_dbg_printf("%x", public_key[i]);
-    }
-    microkit_dbg_printf("\n");
-
-    // Print the signature in hex
-    microkit_dbg_printf(PROGNAME "Signature: 0x");
-    for (int i = 0; i < ED25519_SIGNATURE_BYTES; i++) {
-        microkit_dbg_printf("%x", signature[i]);
-    }
-    microkit_dbg_printf("\n");
-
-    // Print the data in hex (optional, can be removed in production)
-    microkit_dbg_printf(PROGNAME "Data (size %d bytes): 0x", data_size);
-    for (size_t i = 0; i < data_size; i++) {
-        microkit_dbg_printf("%x", data[i]);
-    }
-    microkit_dbg_printf("\n");
-
-    // Perform signature verification
-    int valid_signature = ed25519_verify(signature, data, data_size, public_key);
-
-    if (valid_signature != 1) {
-        microkit_dbg_printf(PROGNAME "ed25519_verify failed. Invalid signature.\n");
-        return seL4_InvalidArgument;
-    }
-
-    microkit_dbg_printf(PROGNAME "ed25519_verify succeeded. Signature is valid.\n");
-
-    const unsigned char *access_rights_table = data + SYSTEM_HASH_SIZE + NUM_ENTRIES_SIZE;
-
-    // Parse each access right entry
-    for (uint32_t i = 0; i < rights->num_entries; i++) {
-        AccessRightEntry *entry = &rights->entries[i];
-        entry->type = (AccessType)*(access_rights_table + i * ACCESS_RIGHT_ENTRY_SIZE);
-        entry->data = *((seL4_Word*)(access_rights_table + i * ACCESS_RIGHT_ENTRY_SIZE + sizeof(uint8_t)));
-        microkit_dbg_printf(PROGNAME "Parsed access right %d: type=%d, data=0x%x\n", i, entry->type, (unsigned long long)entry->data);
-    }
-
-    return seL4_NoError;
-}
-
-/**
- * @brief Applies access rights to build allowed lists.
- *
- * @param rights Pointer to AccessRights structure.
- */
-static seL4_Error populate_allowed(const AccessRights *rights)
-{
-    // Reset allowed lists
-    custom_memset(allowed_channels, 0, sizeof(allowed_channels));
-    custom_memset(allowed_irqs, 0, sizeof(allowed_irqs));
-    num_allowed_mappings = 0;
-
-    for (uint32_t i = 0; i < rights->num_entries; i++) {
-        const AccessRightEntry *entry = &rights->entries[i];
-        switch (entry->type) {
-            case ACCESS_TYPE_CHANNEL:
-                if (entry->data < MICROKIT_MAX_CHANNELS && channels[entry->data]) {
-                    allowed_channels[entry->data] = true;
-                    microkit_dbg_printf(PROGNAME "Allowed channel ID: %d\n", (unsigned long long)entry->data);
-                } else {
-                    microkit_dbg_printf(PROGNAME "Invalid channel ID: %d\n", (unsigned long long)entry->data);
-                    return seL4_InvalidArgument;
-                }
-                break;
-
-            case ACCESS_TYPE_IRQ:
-                if (entry->data < MICROKIT_MAX_CHANNELS && irqs[entry->data]) {
-                    allowed_irqs[entry->data] = true;
-                    microkit_dbg_printf(PROGNAME "Allowed IRQ ID: %d\n", (unsigned long long)entry->data);
-                } else {
-                    microkit_dbg_printf(PROGNAME "Invalid IRQ ID: %d\n", (unsigned long long)entry->data);
-                    return seL4_InvalidArgument;
-                }
-                break;
-
-            case ACCESS_TYPE_MEMORY:
-                if (num_allowed_mappings < MAX_MAPPINGS) {
-                    seL4_Word vaddr = entry->data;
-                    MemoryMapping *mapping = tsldr_find_mapping_by_vaddr(NULL, vaddr, false, mappings);
-                    if (mapping != NULL) {
-                        allowed_mappings[num_allowed_mappings++] = *mapping;
-                        microkit_dbg_printf(PROGNAME "Allowed memory vaddr: 0x%x\n", (unsigned long long)vaddr);
-                    } else {
-                        microkit_dbg_printf(PROGNAME "Mapping not found for vaddr: 0x%x\n", (unsigned long long)vaddr);
-                        return seL4_InvalidArgument;
-                    }
-                } else {
-                    microkit_dbg_printf(PROGNAME "Number of allowed mappings exceeded\n");
-                    return seL4_InvalidArgument;
-                }
-                break;
-
-            default:
-                microkit_dbg_printf(PROGNAME "Unknown access type: %d\n", (unsigned int)entry->type);
-                return seL4_InvalidArgument;
-        }
-    }
-
-    return seL4_NoError;
-}
-
-static void remove_caps()
-{
-    // Delete disallowed channel capabilities
-    for (seL4_Word channel_id = 0; channel_id < MICROKIT_MAX_CHANNELS; channel_id++) {
-        if (allowed_channels[channel_id] || !channels[channel_id]) {
-            continue;
-        }
-
-        seL4_Error error = seL4_CNode_Delete(
-            CHILD_CSPACE_CAP,
-            BASE_OUTPUT_NOTIFICATION_CAP + channel_id,
-            PD_CAP_BITS
-        );
-
-        if (error != seL4_NoError) {
-            microkit_dbg_printf(PROGNAME "Failed to delete channel cap: channel_id=%d error=%d\n", channel_id, error);
-            microkit_internal_crash(error);
-        }
-
-        microkit_dbg_printf(PROGNAME "Deleted channel cap: channel_id=%d\n", channel_id);   
-    }
-
-    // Delete disallowed IRQ capabilities
-    for (seL4_Word irq_id = 0; irq_id < MICROKIT_MAX_CHANNELS; irq_id++) {
-        if (allowed_irqs[irq_id] || !irqs[irq_id]) {
-            continue;
-        }
-
-        seL4_Error error = seL4_CNode_Delete(
-            CHILD_CSPACE_CAP,
-            BASE_IRQ_CAP + irq_id,
-            PD_CAP_BITS
-        );
-
-        if (error != seL4_NoError) {
-            microkit_dbg_printf(PROGNAME "Failed to delete IRQ cap: irq_id=%d error=%d\n", irq_id, error);
-            microkit_internal_crash(error);
-        }
-
-        microkit_dbg_printf(PROGNAME "Deleted IRQ cap: irq_id=%d\n", irq_id);
-    }
-
-    // Map only the allowed memory regions
-    for (seL4_Word i = 0; i < num_allowed_mappings; i++) {
-        const MemoryMapping *mapping = &allowed_mappings[i];
-        microkit_dbg_printf(PROGNAME "Mapping allowed memory: vaddr=0x%x\n", mapping->vaddr);
-
-        seL4_CapRights_t rights = seL4_AllRights;
-        rights.words[0] = mapping->rights;
-
-        seL4_Error error = seL4_ARM_Page_Map(
-            mapping->page,
-            CHILD_VSPACE_CAP,
-            mapping->vaddr,
-            rights,
-            mapping->attrs
-        );
-
-        if (error != seL4_NoError) {
-            microkit_dbg_printf(PROGNAME "Failed to map memory: vaddr=0x%x error=%d\n", mapping->vaddr, error);
-            microkit_internal_crash(error);
-        }
-
-        microkit_dbg_printf(PROGNAME "Mapped allowed memory: page=0x%x vaddr=0x%x\n", mapping->page, mapping->vaddr);
-    }
-}
-
-/**
- * @brief Restores capabilities based on access rights during reset.
- *
- * @param rights Pointer to AccessRights structure.
- */
-static void restore_caps()
-{
-    // Restore disallowed channel capabilities
-    for (seL4_Word channel_id = 0; channel_id < MICROKIT_MAX_CHANNELS; channel_id++) {
-        if (allowed_channels[channel_id] || !channels[channel_id]) {
-            continue;
-        }
-
-        seL4_Error error = seL4_CNode_Copy(
-            CHILD_CSPACE_CAP,
-            BASE_OUTPUT_NOTIFICATION_CAP + channel_id,
-            PD_CAP_BITS,
-            PD_TEMPLATE_CNODE_ROOT,
-            CHILD_BASE_OUTPUT_NOTIFICATION_CAP + channel_id,
-            PD_CAP_BITS,
-            seL4_AllRights
-        );
-
-        if (error != seL4_NoError) {
-            microkit_dbg_printf(PROGNAME "Failed to restore channel cap: channel_id=%d error=%d\n", channel_id, error);
-            microkit_internal_crash(error);
-        }
-
-        microkit_dbg_printf(PROGNAME "Restored channel cap: channel_id=%d\n", channel_id);
-    }
-
-    // Restore disallowed IRQ capabilities
-    for (seL4_Word irq_id = 0; irq_id < MICROKIT_MAX_CHANNELS; irq_id++) {
-        if (allowed_irqs[irq_id] || !irqs[irq_id]) {
-            continue;
-        }
-
-        seL4_Error error = seL4_CNode_Copy(
-            CHILD_CSPACE_CAP,
-            BASE_IRQ_CAP + irq_id,
-            PD_CAP_BITS,
-            PD_TEMPLATE_CNODE_ROOT,
-            CHILD_BASE_IRQ_CAP + irq_id,
-            PD_CAP_BITS,
-            seL4_AllRights
-        );
-
-        if (error != seL4_NoError) {
-            microkit_dbg_printf(PROGNAME "Failed to restore IRQ cap: irq_id=%d error=%d\n", irq_id, error);
-            microkit_internal_crash(error);
-        }
-        
-        microkit_dbg_printf(PROGNAME "Restored IRQ cap: irq_id=%d\n", irq_id);
-    }
-
-    // Unmapped allowed memory mappings
-    for (seL4_Word i = 0; i < num_allowed_mappings; i++) {
-        const MemoryMapping *mapping = &allowed_mappings[i];
-        microkit_dbg_printf(PROGNAME "Unmapping mapping: vaddr=0x%x\n", mapping->vaddr);
-
-        seL4_Error error = seL4_ARM_Page_Unmap(mapping->page);
-
-        if (error != seL4_NoError) {
-            microkit_dbg_printf(PROGNAME "Failed to unmap mapping: vaddr=0x%x error=%d\n", mapping->vaddr, error);
-            microkit_internal_crash(error);
-        }
-
-        microkit_dbg_printf(PROGNAME "Unmapped mapping: vaddr=0x%x\n", mapping->vaddr);
-    }
 }

@@ -71,7 +71,9 @@ _Static_assert(sizeof(tsldr_md_t) == TSLDR_MD_SIZE,
 /* access to child TCB from monitor */
 #define PD_TEMPLATE_CHILD_TCB   1
 /* for monitor to access the cnode of container */
-#define PD_TEMPLATE_CHILD_CNODE 8
+#define PD_TEMPLATE_CHILD_CNODE     8
+/* for monitor to access the vspace of container */
+#define PD_TEMPLATE_CHILD_VSPACE    9
 /* for monitor to access it's own cspace */
 #define PD_TEMPLATE_CNODE_ROOT  586
 /* for monitor to access the background CNode of its child */
@@ -180,10 +182,10 @@ void tsldr_init_metadata(tsldr_md_t *tsldr_metadata_patched);
 void tsldr_init(trusted_loader_t *loader, crypto_verify_fn fn, seL4_Word hash_val, size_t hash_len, size_t signature_len);
 
 
-void tsldr_restore_caps(trusted_loader_t *loader);
+void tsldr_restore_caps(trusted_loader_t *loader, bool self_loading);
 
 
-void tsldr_remove_caps(trusted_loader_t *loader);
+void tsldr_remove_caps(trusted_loader_t *loader, bool self_loading);
 
 
 // FIXME: this function refresh the regions where the client elf should live
