@@ -1227,7 +1227,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
             "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
                 config, &xml_sdf, &child, false, false,
             )?),
-            "protection_domain_template" => root_pds.push(ProtectionDomain::from_xml(
+            "template" => root_pds.push(ProtectionDomain::from_xml(
                 config, &xml_sdf, &child, false, true,
             )?),
             "channel" => channel_nodes.push(child),
