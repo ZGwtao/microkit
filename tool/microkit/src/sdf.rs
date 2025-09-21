@@ -985,13 +985,13 @@ impl Channel {
                 ));
             }
         } else {
-            if is_end_a_optional || is_end_b_optional {
-                return Err(value_error(
-                    xml_sdf,
-                    node,
-                    "non-optional channels must not connect children of template PDs".to_string(),
-                ));
-            }
+            //if is_end_a_optional || is_end_b_optional {
+            //    return Err(value_error(
+            //        xml_sdf,
+            //        node,
+            //        "non-optional channels must not connect children of template PDs".to_string(),
+            //    ));
+            //}
         }
 
         if end_a.pp && end_b.pp {
