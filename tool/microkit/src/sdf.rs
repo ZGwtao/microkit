@@ -174,6 +174,13 @@ pub struct ProtectionDomain {
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
+pub struct AccessRightsDomain {
+    pub id: u64,
+    pub maps: Vec<SysMap>,
+    pub setvars: Vec<SysSetVar>,
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub struct VirtualMachine {
     pub vcpus: Vec<VirtualCpu>,
     pub name: String,
@@ -210,6 +217,7 @@ impl SysMap {
         node: &roxmltree::Node,
         allow_setvar: bool,
         max_vaddr: u64,
+        optional: bool,
     ) -> Result<SysMap, String> {
         let mut attrs = vec!["mr", "vaddr", "perms", "cached", "optional"];
         if allow_setvar {
@@ -269,21 +277,23 @@ impl SysMap {
             true
         };
 
-        let optional = if let Some(xml_optional) = node.attribute("optional") {
-            match str_to_bool(xml_optional) {
-                Some(val) => val,
-                None => {
-                    return Err(value_error(
-                        xml_sdf,
-                        node,
-                        "optional must be 'true' or 'false'".to_string(),
-                    ))
+        let mut optional = optional; // start with the parameter
+        if !optional {
+            optional = if let Some(xml_optional) = node.attribute("optional") {
+                match str_to_bool(xml_optional) {
+                    Some(val) => val,
+                    None => {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "optional must be 'true' or 'false'".to_string(),
+                        ))
+                    }
                 }
-            }
-        } else {
-            // Default to required
-            false
-        };
+            } else {
+                false // Default to required
+            };
+        }
 
         Ok(SysMap {
             mr,
@@ -489,7 +499,7 @@ impl ProtectionDomain {
                 }
                 "map" => {
                     let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
-                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr)?;
+                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr, false)?;
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
                         // Check that the symbol does not already exist
@@ -605,6 +615,11 @@ impl ProtectionDomain {
 
                     virtual_machine = Some(VirtualMachine::from_xml(config, xml_sdf, &child)?);
                 }
+                "access_rights_domain" => {
+                    let acrs = AccessRightsDomain::from_xml(config, xml_sdf, &child, stack_size)?;
+                    //acrs_dms.push(acrs);
+                    maps.append(&mut acrs.maps.clone());
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
@@ -687,6 +702,76 @@ impl ProtectionDomain {
     }
 }
 
+impl AccessRightsDomain {
+    fn from_xml(
+        config: &Config,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        stack_size: u64,
+    ) -> Result<AccessRightsDomain, String> {
+
+        let id = if let Some(acrs_id) = node.attribute("id") {
+            sdf_parse_number(acrs_id, node)?
+        } else {
+            0
+        };
+
+        let mut maps = Vec::new();
+        let mut setvars: Vec<SysSetVar> = Vec::new();
+    
+        for child in node.children() {
+            if !child.is_element() {
+                continue;
+            }
+            match child.tag_name().name() {
+                "map" => {
+                    let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
+                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr, true)?;
+                    // all mappings from access right domains are optional
+                    // map.optional = true;
+                    if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
+                        // Check that the symbol does not already exist
+                        for setvar in &setvars {
+                            if setvar_vaddr == setvar.symbol {
+                                return Err(value_error(
+                                    xml_sdf,
+                                    &child,
+                                    format!("setvar on symbol '{}' already exists", setvar_vaddr),
+                                ));
+                            }
+                        }
+
+                        setvars.push(SysSetVar {
+                            symbol: setvar_vaddr.to_string(),
+                            kind: SysSetVarKind::Vaddr { address: map.vaddr },
+                        });
+                    }
+                    maps.push(map);
+                }
+                "channel_end" => {
+                    // TODO
+                }
+                _ => {
+                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    return Err(format!(
+                        "Invalid XML element '{}': {}",
+                        child.tag_name().name(),
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
+            }
+        }
+
+        Ok(AccessRightsDomain {
+            id,
+            maps,
+            //channel_ends,
+            //irqs,
+            setvars,
+        })
+    }
+}
+
 impl VirtualMachine {
     fn from_xml(
         config: &Config,
@@ -764,7 +849,7 @@ impl VirtualMachine {
                 "map" => {
                     // Virtual machines do not have program images and so we do not allow
                     // setvar_vaddr on SysMap
-                    let map = SysMap::from_xml(xml_sdf, &child, false, config.vm_map_max_vaddr())?;
+                    let map = SysMap::from_xml(xml_sdf, &child, false, config.vm_map_max_vaddr(), false)?;
                     maps.push(map);
                 }
                 _ => {
