@@ -25,7 +25,7 @@
     <memory_region name="client_payload_shared" size="0x800_000" page_size="0x200_000" />
     <memory_region name="trusted_loader_md" size="0x1000" page_size="0x1000" />
 
-    <protection_domain_template name="container_monitor" priority="254">
+    <template name="container_monitor" priority="254">
         <program_image path="container-monitor.elf" />
 
         <map mr="trusted_loader_exec" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="trusted_loader_exec" />
@@ -67,7 +67,7 @@
 
             <irq irq="0" id="5" optional="true" />
         </protection_domain>
-    </protection_domain_template>
+    </template>
 
     <!-- container monitor frontend PD (for demoing) -->
     <protection_domain name="frontend" priority="250">
@@ -83,7 +83,7 @@
         <map mr="client_payload_shared" vaddr="0xB000000" perms="rw" cached="true" setvar_vaddr="shared2" />
     </protection_domain>
 
-    <protection_domain_template name="trusted_loader2" priority="252">
+    <template name="trusted_loader2" priority="252">
         <program_image path="trusted_loader.elf" />
         <map mr="sender_program" vaddr="0x4000000" perms="rw" cached="true" setvar_vaddr="container_exec" />
         <map mr="trusted_loader2_shared" vaddr="0x6000000" perms="rw" cached="true" setvar_vaddr="shared1" />
@@ -92,7 +92,7 @@
         <protection_domain name="sender" id="1" priority="251">
             <map mr="sender_program" vaddr="0x200000" perms="rwx" cached="true" />
         </protection_domain>
-    </protection_domain_template>
+    </template>
 
     <channel optional="true">
         <end pd="sender" id="1" />
