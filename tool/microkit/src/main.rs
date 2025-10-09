@@ -2623,27 +2623,6 @@ fn build_system(
                     badge: 0,
                 },
             ));
-
-            if let Some(parent_idx) = pd.parent {
-                let parent_pd = &system.protection_domains[parent_idx];
-                if parent_pd.is_template {
-                    let parent_cnode_obj = cnode_objs_by_pd[parent_pd];
-                    assert!(CHILD_BASE_IRQ_CAP + sysirq.id < PD_CAP_SIZE);
-                    system_invocations.push(Invocation::new(
-                        config,
-                        InvocationArgs::CnodeMint {
-                            cnode: parent_cnode_obj.cap_addr,
-                            dest_index: CHILD_BASE_IRQ_CAP + sysirq.id,
-                            dest_depth: PD_CAP_BITS,
-                            src_root: root_cnode_cap,
-                            src_obj: *irq_cap_address,
-                            src_depth: config.cap_address_bits,
-                            rights: Rights::All as u64,
-                            badge: 0,
-                        },
-                    ));
-                }
-            }
         }
     }
 
