@@ -3090,24 +3090,7 @@ fn build_system(
         if let Some(parent_idx) = pd.parent {
             /* check if the parent is PD template  */
             if system.protection_domains[parent_idx].is_template {
-
                 let tsldr_context_obj = tsldr_context_objs[pd_idx];
-                /* back up in parent's CNode */
-                //let cnode_obj = &cnode_objs[parent_idx];
-                //system_invocations.push(Invocation::new(
-                //    config,
-                //    InvocationArgs::CnodeMint {
-                //        cnode: cnode_obj.cap_addr,
-                //        dest_index: TRUSTED_LOADER_CONTEXT,
-                //        dest_depth: PD_CAP_BITS,
-                //        src_root: root_cnode_cap,
-                //        src_obj: tsldr_context_obj.cap_addr,
-                //        src_depth: config.cap_address_bits,
-                //        rights: Rights::All as u64,
-                //        badge: 0,
-                //    },
-                //));
-
                 /* back up in template's background CNode */
                 let bgnode_obj = &bgnode_objs[pd_idx];
                 system_invocations.push(Invocation::new(
@@ -3123,18 +3106,6 @@ fn build_system(
                         badge: 0,
                     },
                 ));
-
-                /* map in parent's address space as shared memory */
-                //system_invocations.push(Invocation::new(
-                //    config,
-                //    InvocationArgs::PageMap {
-                //        page: tsldr_context_obj.cap_addr,
-                //        vspace: pd_vspace_objs[parent_idx].cap_addr,
-                //        vaddr: SYMBOL_TRUSTED_LOADER_CONTEXT,
-                //        rights: Rights::Read as u64 | Rights::Write as u64,
-                //        attr: ArmVmAttributes::ParityEnabled as u64,
-                //    },
-                //));
                 /* -- don't map to child's address space ... -- */
             }
         }
