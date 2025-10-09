@@ -1630,6 +1630,9 @@ fn build_system(
         );
         small_page_names.push(ipc_buffer_str);
     }
+    /* 'template-PD': we need a trusted loader context page to pass trust loading info */
+    // not each PD needs this... (only the child of a template PD will need it)
+    // these tsldr pages are by default unmapped, but just created to be late-mapped...
     for pd in &system.protection_domains {
         let (page_size_human, page_size_label) = util::human_size_strict(PageSize::Large as u64);
         let tsldr_context_str = format!(
@@ -1664,6 +1667,7 @@ fn build_system(
 
     // All the IPC buffers are the first to be allocated which is why this works
     let ipc_buffer_objs = &small_page_objs[..system.protection_domains.len()];
+    /* 'template-PD': the objects of the trusted loader context */
     let tsldr_context_objs = &large_page_objs[..system.protection_domains.len()];
 
     let mut mr_pages: HashMap<&SysMemoryRegion, Vec<Object>> = HashMap::new();
@@ -1851,14 +1855,34 @@ fn build_system(
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
         let mut vaddrs = vec![];
 
+        /* If the pd is template-PD,  */
+        if let Some(parent_idx) = pd.parent {
+            let parent = &system.protection_domains[parent_idx];
+            if parent.is_template == true {
+                /* ipc symbol should be the only valid mapping in the vspace */
+                vaddrs.push((SYMBOL_IPC_BUFFER_DELAY, PageSize::Small));
+                /* trusted loader context as well... */
+                //vaddrs.push((SYMBOL_TRUSTED_LOADER_CONTEXT, PageSize::Large));
+                assert!(
+                    pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER).is_err(),
+                    "IPC_BUFFER symbol should not exist"
+                );
+            }
+        }
+        /* This would be false for a template-PD's child */
         if let Ok((ipc_buffer_vaddr, _)) = pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER) {
             // println!("pd={} ipc_buffer_vaddr=0x{:x}", pd.name, ipc_buffer_vaddr);
             vaddrs.push((ipc_buffer_vaddr, PageSize::Small));
-        } else {
-            // println!("pd={} no ipc_buffer_vaddr", pd.name);
-            vaddrs.push((SYMBOL_IPC_BUFFER_DELAY, PageSize::Small));
-            vaddrs.push((SYMBOL_TRUSTED_LOADER_CONTEXT, PageSize::Large));
         }
+
+        //if let Ok((ipc_buffer_vaddr, _)) = pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER) {
+        //    // println!("pd={} ipc_buffer_vaddr=0x{:x}", pd.name, ipc_buffer_vaddr);
+        //    vaddrs.push((ipc_buffer_vaddr, PageSize::Small));
+        //} else {
+        //    // println!("pd={} no ipc_buffer_vaddr", pd.name);
+        //    vaddrs.push((SYMBOL_IPC_BUFFER_DELAY, PageSize::Small));
+        //    vaddrs.push((SYMBOL_TRUSTED_LOADER_CONTEXT, PageSize::Large));
+        //}
 
         let mut upper_directory_vaddrs = HashSet::new();
         let mut directory_vaddrs = HashSet::new();
@@ -3175,20 +3199,21 @@ fn build_system(
 
                 let tsldr_context_obj = tsldr_context_objs[pd_idx];
                 /* back up in parent's CNode */
-                let cnode_obj = &cnode_objs[parent_idx];
-                system_invocations.push(Invocation::new(
-                    config,
-                    InvocationArgs::CnodeMint {
-                        cnode: cnode_obj.cap_addr,
-                        dest_index: TRUSTED_LOADER_CONTEXT,
-                        dest_depth: PD_CAP_BITS,
-                        src_root: root_cnode_cap,
-                        src_obj: tsldr_context_obj.cap_addr,
-                        src_depth: config.cap_address_bits,
-                        rights: Rights::All as u64,
-                        badge: 0,
-                    },
-                ));
+                //let cnode_obj = &cnode_objs[parent_idx];
+                //system_invocations.push(Invocation::new(
+                //    config,
+                //    InvocationArgs::CnodeMint {
+                //        cnode: cnode_obj.cap_addr,
+                //        dest_index: TRUSTED_LOADER_CONTEXT,
+                //        dest_depth: PD_CAP_BITS,
+                //        src_root: root_cnode_cap,
+                //        src_obj: tsldr_context_obj.cap_addr,
+                //        src_depth: config.cap_address_bits,
+                //        rights: Rights::All as u64,
+                //        badge: 0,
+                //    },
+                //));
+
                 /* back up in template's background CNode */
                 let bg_cnode_obj = &bg_cnode_objs[pd_idx];
                 system_invocations.push(Invocation::new(
@@ -3206,16 +3231,16 @@ fn build_system(
                 ));
 
                 /* map in parent's address space as shared memory */
-                system_invocations.push(Invocation::new(
-                    config,
-                    InvocationArgs::PageMap {
-                        page: tsldr_context_obj.cap_addr,
-                        vspace: pd_vspace_objs[parent_idx].cap_addr,
-                        vaddr: SYMBOL_TRUSTED_LOADER_CONTEXT,
-                        rights: Rights::Read as u64 | Rights::Write as u64,
-                        attr: ArmVmAttributes::ParityEnabled as u64,
-                    },
-                ));
+                //system_invocations.push(Invocation::new(
+                //    config,
+                //    InvocationArgs::PageMap {
+                //        page: tsldr_context_obj.cap_addr,
+                //        vspace: pd_vspace_objs[parent_idx].cap_addr,
+                //        vaddr: SYMBOL_TRUSTED_LOADER_CONTEXT,
+                //        rights: Rights::Read as u64 | Rights::Write as u64,
+                //        attr: ArmVmAttributes::ParityEnabled as u64,
+                //    },
+                //));
                 /* -- don't map to child's address space ... -- */
             }
         }
