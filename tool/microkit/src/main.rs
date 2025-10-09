@@ -40,7 +40,6 @@ use util::{
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
 const SYMBOL_IPC_BUFFER: &str = "__sel4_ipc_buffer_obj";
 const SYMBOL_IPC_BUFFER_DELAY: u64 = 0x100_000;
-const SYMBOL_TRUSTED_LOADER_CONTEXT: u64 = 0xE00_000;
 
 const ED25519_PUBLIC_KEY_BYTES: usize = 32;
 
@@ -56,10 +55,6 @@ const MONITOR_EP_CAP_IDX: u64 = 5;
 const TCB_CAP_IDX: u64 = 6;
 const SMC_CAP_IDX: u64 = 7;
 
-// These caps are only valid when the PD is a template (they refer to the child PD)
-const CHILD_CSPACE_CAP_IDX: u64 = 8;
-const CHILD_VSPACE_CAP_IDX: u64 = 9;
-
 const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
@@ -74,13 +69,11 @@ const CHILD_BASE_MAPPING_CAP: u64 = CHILD_BASE_IRQ_CAP + 64;
 const PD_TEMPLATE_CNODE_ROOT: u64 = CHILD_BASE_MAPPING_CAP + 64;
 /* for the parent, where to find its child's the background */
 const PD_TEMPLATE_BACKGROUND_ROOT: u64 = PD_TEMPLATE_CNODE_ROOT + 1;
-/* for the child, where to find the background */
-const PD_TEMPLATE_BACKGROUND_CNODE: u64 = PD_TEMPLATE_BACKGROUND_ROOT + 1;
-/* for the child, where to find its own CNode */
-const PD_TEMPLATE_CHILD_CNODE: u64 = PD_TEMPLATE_BACKGROUND_CNODE + 1;
 
-/* for the parent, where to reference the trusted loader context */
-const TRUSTED_LOADER_CONTEXT: u64 = PD_TEMPLATE_CHILD_CNODE + 1;
+/* for the parent, where to find its child's cspace */
+const PD_TEMPLATE_CHILD_CSPACE_CAP: u64 = PD_TEMPLATE_CNODE_ROOT + 64;
+/* for the parent, where to find its child's vspace */
+const PD_TEMPLATE_CHILD_VSPACE_CAP: u64 = PD_TEMPLATE_CHILD_CSPACE_CAP + 64;
 
 /* for the background, where to find the child CNode */
 const BACKGROUND_CSPACE_CAP_IDX: u64 = 8;
@@ -544,6 +537,7 @@ impl Default for MemoryMapping {
 
 #[repr(C)]
 pub struct TsldrMd {
+    pub child_id: usize,
     pub system_hash: u64,
     pub public_key: [u8; 32],
     pub channels: [u64; 62],
@@ -551,7 +545,8 @@ pub struct TsldrMd {
     pub mappings: [MemoryMapping; 62],
     pub init: u8,
     pub padding: [u8; 4096
-        - (std::mem::size_of::<u64>()
+        - (std::mem::size_of::<usize>()
+           + std::mem::size_of::<u64>()
            + 32
            + std::mem::size_of::<u64>() * 62   // channels
            + std::mem::size_of::<u64>() * 62   // irqs
@@ -561,6 +556,7 @@ pub struct TsldrMd {
 impl Default for TsldrMd {
     fn default() -> Self {
         TsldrMd {
+            child_id: 0,
             system_hash: 0,
             public_key: [0u8; 32],
             channels: [0u64; 62],
@@ -568,7 +564,8 @@ impl Default for TsldrMd {
             mappings: [MemoryMapping::default(); 62],
             init: 0,
             padding: [0u8; 4096
-                - (std::mem::size_of::<u64>()
+                - (std::mem::size_of::<usize>()
+                + std::mem::size_of::<u64>()
                 + 32
                 + std::mem::size_of::<u64>() * 62
                 + std::mem::size_of::<u64>() * 62
@@ -657,6 +654,8 @@ pub fn pd_write_symbols(
             md.channels.copy_from_slice(&channels_to_remove);
             md.irqs.copy_from_slice(&irqs_to_remove);
             md.system_hash = system_hash;
+            // FIXME
+            md.child_id = child_idx;
 
             for (i, om) in mappings_to_remove.iter().enumerate() {
                 md.mappings[i] = MemoryMapping {
@@ -2652,7 +2651,7 @@ fn build_system(
 
                     // Mint access to the child's CSpace in the CSpace of the parent PD if the parent is a template
                     if pd.is_template {
-                        let cspace_cap_idx = CHILD_CSPACE_CAP_IDX;
+                        let cspace_cap_idx = PD_TEMPLATE_CHILD_CSPACE_CAP + maybe_child_pd.id.unwrap();
                         assert!(cspace_cap_idx < PD_CAP_SIZE);
                         system_invocations.push(Invocation::new(
                             config,
@@ -2683,24 +2682,8 @@ fn build_system(
                             },
                         ));
 
-                        //let child_cnode_cap_idx = PD_TEMPLATE_CHILD_CNODE;
-                        //assert!(child_cnode_cap_idx < PD_CAP_SIZE);
-                        //system_invocations.push(Invocation::new(
-                        //    config,
-                        //    InvocationArgs::CnodeMint {
-                        //        cnode: cnode_objs[maybe_child_idx].cap_addr,
-                        //        dest_index: child_cnode_cap_idx,
-                        //        dest_depth: PD_CAP_BITS,
-                        //        src_root: root_cnode_cap,
-                        //        src_obj: cnode_objs[maybe_child_idx].cap_addr,
-                        //        src_depth: config.cap_address_bits,
-                        //        rights: Rights::All as u64,
-                        //        badge: 0,
-                        //    },
-                        //));
-
                         // Now do the VSpace as well
-                        let vspace_cap_idx = CHILD_VSPACE_CAP_IDX;
+                        let vspace_cap_idx = PD_TEMPLATE_CHILD_VSPACE_CAP + maybe_child_pd.id.unwrap();
                         assert!(vspace_cap_idx < PD_CAP_SIZE);
                         system_invocations.push(Invocation::new(
                             config,
