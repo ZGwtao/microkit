@@ -81,11 +81,6 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 
 seL4_MessageInfo_t monitor_call_debute(void)
 {
-    seL4_Error error = tsldr_grant_cspace_access();
-    if (error != seL4_NoError) {
-        return microkit_msginfo_new(error, 0);
-    }
-
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
     if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
@@ -97,6 +92,11 @@ seL4_MessageInfo_t monitor_call_debute(void)
 
     /* init metadata for proto-container's tsldr */
     tsldr_init_metadata(&tsldr_metadata_patched);
+
+    seL4_Error error = tsldr_grant_cspace_access(tsldr_metadata_patched.child_id);
+    if (error != seL4_NoError) {
+        return microkit_msginfo_new(error, 0);
+    }
 
     load_elf((void*)trusted_loader_exec, ehdr);
     microkit_dbg_printf(PROGNAME "Copied trusted loader to child PD's memory region\n");
@@ -118,7 +118,7 @@ seL4_MessageInfo_t monitor_call_restart(void)
     /* init metadata for proto-container's tsldr */
     tsldr_init_metadata(&tsldr_metadata_patched);
 
-    seL4_Error error = tsldr_grant_cspace_access();
+    seL4_Error error = tsldr_grant_cspace_access(tsldr_metadata_patched.child_id);
     if (error != seL4_NoError) {
         return microkit_msginfo_new(error, 0);
     }
