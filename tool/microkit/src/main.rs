@@ -2527,20 +2527,6 @@ fn build_system(
                 badge: 0,
             },
         ));
-
-        system_invocations.push(Invocation::new(
-            config,
-            InvocationArgs::CnodeMint {
-                cnode: bgnode_objs[idx].cap_addr,
-                dest_index: INPUT_CAP_IDX,
-                dest_depth: PD_CAP_BITS,
-                src_root: root_cnode_cap,
-                src_obj: obj.cap_addr,
-                src_depth: config.cap_address_bits,
-                rights: Rights::All as u64,
-                badge: 0,
-            },
-        ));
     }
 
     // Mint access to the reply cap
