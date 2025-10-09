@@ -55,6 +55,9 @@ const MONITOR_EP_CAP_IDX: u64 = 5;
 const TCB_CAP_IDX: u64 = 6;
 const SMC_CAP_IDX: u64 = 7;
 
+/* for the parent to access it's own cspace if it is a template PD */
+const PD_TEMPLATE_CNODE_ROOT: u64 = 9;
+
 const BASE_OUTPUT_NOTIFICATION_CAP: u64 = 10;
 const BASE_OUTPUT_ENDPOINT_CAP: u64 = BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const BASE_IRQ_CAP: u64 = BASE_OUTPUT_ENDPOINT_CAP + 64;
@@ -66,12 +69,11 @@ const BASE_VCPU_CAP: u64 = BASE_VM_TCB_CAP + 64;
 const CHILD_BASE_OUTPUT_NOTIFICATION_CAP: u64 = BASE_VCPU_CAP + 64;
 const CHILD_BASE_IRQ_CAP: u64 = CHILD_BASE_OUTPUT_NOTIFICATION_CAP + 64;
 const CHILD_BASE_MAPPING_CAP: u64 = CHILD_BASE_IRQ_CAP + 64;
-const PD_TEMPLATE_CNODE_ROOT: u64 = CHILD_BASE_MAPPING_CAP + 64;
 /* for the parent, where to find its child's the background */
-const PD_TEMPLATE_BACKGROUND_ROOT: u64 = PD_TEMPLATE_CNODE_ROOT + 1;
+const PD_TEMPLATE_BACKGROUND_ROOT: u64 = CHILD_BASE_MAPPING_CAP + 64;
 
 /* for the parent, where to find its child's cspace */
-const PD_TEMPLATE_CHILD_CSPACE_CAP: u64 = PD_TEMPLATE_CNODE_ROOT + 64;
+const PD_TEMPLATE_CHILD_CSPACE_CAP: u64 = PD_TEMPLATE_BACKGROUND_ROOT + 64;
 /* for the parent, where to find its child's vspace */
 const PD_TEMPLATE_CHILD_VSPACE_CAP: u64 = PD_TEMPLATE_CHILD_CSPACE_CAP + 64;
 
@@ -2627,6 +2629,9 @@ fn build_system(
 
     // Mint access to the child TCB in the CSpace of root PDs
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        // 'template-PD'
+        // by default, each PD can't access its own CSpace?
+        let mut access_cspace: bool = false;
         for (maybe_child_idx, maybe_child_pd) in system.protection_domains.iter().enumerate() {
             // Before doing anything, check if we are dealing with a child PD
             if let Some(parent_idx) = maybe_child_pd.parent {
@@ -2713,27 +2718,34 @@ fn build_system(
                                 badge: 0,
                             },
                         ));
-                        
-                        assert!(PD_TEMPLATE_CNODE_ROOT < PD_CAP_SIZE);
+
+                        /* for each template PD, grant access to its own CSpace for once... */
+                        if access_cspace == false {
+                            assert!(PD_TEMPLATE_CNODE_ROOT < PD_CAP_SIZE);
+                            system_invocations.push(Invocation::new(
+                                config,
+                                InvocationArgs::CnodeMint {
+                                    cnode: cnode_objs[pd_idx].cap_addr,
+                                    dest_index: PD_TEMPLATE_CNODE_ROOT,
+                                    dest_depth: PD_CAP_BITS,
+                                    src_root: root_cnode_cap,
+                                    src_obj: cnode_objs[pd_idx].cap_addr,
+                                    src_depth: config.cap_address_bits,
+                                    rights: Rights::All as u64,
+                                    badge: 0,
+                                },
+                            ));
+                            access_cspace = true;
+                        }
+
+                        /* for a parent template PD, it can access more than one bnode... */
+                        let bgroot_idx = PD_TEMPLATE_BACKGROUND_ROOT + maybe_child_pd.id.unwrap();
+                        assert!(bgroot_idx < PD_CAP_SIZE);
                         system_invocations.push(Invocation::new(
                             config,
                             InvocationArgs::CnodeMint {
                                 cnode: cnode_objs[pd_idx].cap_addr,
-                                dest_index: PD_TEMPLATE_CNODE_ROOT,
-                                dest_depth: PD_CAP_BITS,
-                                src_root: root_cnode_cap,
-                                src_obj: cnode_objs[pd_idx].cap_addr,
-                                src_depth: config.cap_address_bits,
-                                rights: Rights::All as u64,
-                                badge: 0,
-                            },
-                        ));
-                        assert!(PD_TEMPLATE_BACKGROUND_ROOT < PD_CAP_SIZE);
-                        system_invocations.push(Invocation::new(
-                            config,
-                            InvocationArgs::CnodeMint {
-                                cnode: cnode_objs[pd_idx].cap_addr,
-                                dest_index: PD_TEMPLATE_BACKGROUND_ROOT,
+                                dest_index: bgroot_idx, /* base + child id */
                                 dest_depth: PD_CAP_BITS,
                                 src_root: root_cnode_cap,
                                 src_obj: bgnode_objs[maybe_child_idx].cap_addr,
