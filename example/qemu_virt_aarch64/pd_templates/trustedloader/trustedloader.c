@@ -354,7 +354,7 @@ void tsldr_remove_caps(trusted_loader_t *loader, bool self_loading)
 
         if (self_loading) {
             /* move target page from background CNode to current CNode */
-            seL4_CPtr page_index = mapping->page - CNODE_CHILD_BASE_MAPPING_CAP;
+            seL4_CPtr page_index = mapping->page;
             error = seL4_CNode_Move(
                 CNODE_SELF_CAP, CNODE_BASE_MAPPING_CAP + page_index, PD_CAP_BITS,
                 CNODE_BACKGROUND_CAP, BACKGROUND_MAPPING_BASE_CAP + page_index, PD_CAP_BITS);
@@ -515,7 +515,7 @@ void tsldr_restore_caps(trusted_loader_t *loader, bool self_loading)
 
         if (self_loading){
             /* move target page from background CNode to current CNode */
-            seL4_CPtr page_index = mapping->page - CNODE_CHILD_BASE_MAPPING_CAP;
+            seL4_CPtr page_index = mapping->page;
             error = seL4_CNode_Move(
                 CNODE_SELF_CAP, CNODE_BASE_MAPPING_CAP + page_index, PD_CAP_BITS,
                 CNODE_BACKGROUND_CAP, BACKGROUND_MAPPING_BASE_CAP + page_index, PD_CAP_BITS);
