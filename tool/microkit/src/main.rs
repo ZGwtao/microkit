@@ -2856,27 +2856,6 @@ fn build_system(
                         badge: send_badge,
                     },
                 ));
-
-                if let Some(parent_idx) = send_pd.parent {
-                    let parent_pd = &system.protection_domains[parent_idx];
-                    if parent_pd.is_template {
-                        let parent_cnode_obj = cnode_objs_by_pd[parent_pd];
-                        assert!(CHILD_BASE_OUTPUT_NOTIFICATION_CAP + send.id < PD_CAP_SIZE);
-                        system_invocations.push(Invocation::new(
-                            config,
-                            InvocationArgs::CnodeMint {
-                                cnode: parent_cnode_obj.cap_addr,
-                                dest_index: CHILD_BASE_OUTPUT_NOTIFICATION_CAP + send.id,
-                                dest_depth: PD_CAP_BITS,
-                                src_root: root_cnode_cap,
-                                src_obj: recv_notification_obj.cap_addr,
-                                src_depth: config.cap_address_bits,
-                                rights: Rights::All as u64, // FIXME: Check rights
-                                badge: send_badge,
-                            },
-                        ));
-                    }
-                }
             }
 
             if send.pp {
