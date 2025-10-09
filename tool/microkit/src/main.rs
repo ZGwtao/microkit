@@ -2650,25 +2650,6 @@ fn build_system(
                         },
                     ));
 
-                    /* Assign TCB cap for each child PD */
-                    let child_cap_idx = BASE_PD_TCB_CAP;
-                    assert!(child_cap_idx < PD_CAP_SIZE);
-                    system_invocations.push(Invocation::new(
-                        config,
-                        InvocationArgs::CnodeMint {
-                            cnode: cnode_objs[maybe_child_idx].cap_addr,
-                            dest_index: child_cap_idx,
-                            dest_depth: PD_CAP_BITS,
-                            src_root: root_cnode_cap,
-                            src_obj: tcb_objs[maybe_child_idx].cap_addr,
-                            src_depth: config.cap_address_bits,
-                            rights: Rights::All as u64,
-                            badge: 0,
-                        },
-                    ));
-
-                    // println!("Minted TCB cap at cnode={:x} dest_index={:x} src_root={:x} src_obj={:x}  for parent PD {} and child PD {}", cnode_objs[pd_idx].cap_addr, cap_idx, root_cnode_cap, tcb_objs[maybe_child_idx].cap_addr, pd.name, maybe_child_pd.name);
-
                     // Mint access to the child's CSpace in the CSpace of the parent PD if the parent is a template
                     if pd.is_template {
                         let cspace_cap_idx = CHILD_CSPACE_CAP_IDX;
