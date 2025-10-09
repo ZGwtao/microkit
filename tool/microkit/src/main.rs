@@ -2160,8 +2160,15 @@ fn build_system(
     let mut pd_page_descriptors = Vec::new();
     let mut pd_optional_mappings: HashMap<usize, Vec<OptionalMapping>> = HashMap::new();
     for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
+        /*
+         * pd_optional_mappings:
+         *  -> we need this to pass mapping info to the tsldr context.
+         *  -> each PD has one, empty if non-template-PD's child
+         *      -> only optional mappings lives here...
+         *      -> should be late-mapped as access-rights...
+         */
         pd_optional_mappings.insert(pd_idx, vec![]);
-        let mut mapping_cap_slot = CHILD_BASE_MAPPING_CAP;
+
         let mut bg_mapping_cap_slot = BACKGROUND_CNODE_MAPPING_CAP;
         for (map_set, _) in [(&pd.maps, true), (&pd_extra_maps[pd], false)] {
             for mp in map_set {
@@ -2193,7 +2200,7 @@ fn build_system(
                 assert!(!mr_pages[mr].is_empty());
                 assert!(util::objects_adjacent(&mr_pages[mr]));
 
-                // Handle optional mappings for explicitly mapped memory regions
+                /* try to backup optional mappings... */
                 if mp.optional {
                     let parent_idx = pd.parent.expect(&format!(
                                         "Map for PD memory region '{}' at vaddr=0x{:x} for PD '{}' is optional but there is no parent template PD",
@@ -2202,51 +2209,22 @@ fn build_system(
                     let parent_pd = &system.protection_domains[parent_idx];
                     assert!(parent_pd.is_template, "Map for memory region '{}' at vaddr=0x{:x} for PD '{}' is optional but parent PD '{}' is not a template PD", mp.mr, mp.vaddr, pd.name, parent_pd.name);
 
+                    /* the context is mapped to a page in template PD's address space... */
                     pd_optional_mappings
-                        .get_mut(&parent_idx)
+                        .get_mut(&parent_idx) // FIXME: parent can have more than one child...
                         .unwrap()
                         .push(OptionalMapping {
-                            vaddr: mp.vaddr,
-                            page: mapping_cap_slot,
+                            vaddr: mp.vaddr,    /* page: just the offset of the mapping begins at 0... */
+                            page: bg_mapping_cap_slot - BACKGROUND_CNODE_MAPPING_CAP,
                             number_of_pages: mr_pages[mr].len() as u64,
                             page_size: mr.page_bytes(),
                             rights: rights,
                             attrs: attrs,
                         });
 
+                    /* backup all mappings in the background CNode */
+                    /* (No parent cslot is wasted for this purpose...) */
                     let mut invocation = Invocation::new(
-                        config,
-                        InvocationArgs::CnodeMint {
-                            cnode: cnode_objs[parent_idx].cap_addr,
-                            dest_index: mapping_cap_slot,
-                            dest_depth: PD_CAP_BITS,
-                            src_root: root_cnode_cap,
-                            src_obj: mr_pages[mr][0].cap_addr,
-                            src_depth: config.cap_address_bits,
-                            rights,
-                            badge: 0,
-                        },
-                    );
-                    invocation.repeat(
-                        mr_pages[mr].len() as u32,
-                        InvocationArgs::CnodeMint {
-                            cnode: 0,
-                            dest_index: 1,
-                            dest_depth: 0,
-                            src_root: 0,
-                            src_obj: 1,
-                            src_depth: 0,
-                            rights: 0,
-                            badge: 0,
-                        },
-                    );
-                    system_invocations.push(invocation);
-
-                    // Ensure mapping_cap_slot does not exceed PD_CAP_SIZE, should be <= here because we check after incrementing it
-                    mapping_cap_slot += mr_pages[mr].len() as u64;
-                    assert!(mapping_cap_slot <= PD_CAP_SIZE);
-
-                    invocation = Invocation::new(
                         config,
                         InvocationArgs::CnodeMint {
                             cnode: bgnode_objs[pd_idx].cap_addr,
@@ -2278,60 +2256,60 @@ fn build_system(
                     bg_mapping_cap_slot += mr_pages[mr].len() as u64;
                     assert!(bg_mapping_cap_slot <= PD_CAP_SIZE);
 
-
-                } else {
-                    let mut invocation = Invocation::new(
-                        config,
-                        InvocationArgs::CnodeMint {
-                            cnode: system_cnode_cap,
-                            dest_index: cap_slot,
-                            dest_depth: system_cnode_bits,
-                            src_root: root_cnode_cap,
-                            src_obj: mr_pages[mr][0].cap_addr,
-                            src_depth: config.cap_address_bits,
-                            rights,
-                            badge: 0,
-                        },
-                    );
-                    invocation.repeat(
-                        mr_pages[mr].len() as u32,
-                        InvocationArgs::CnodeMint {
-                            cnode: 0,
-                            dest_index: 1,
-                            dest_depth: 0,
-                            src_root: 0,
-                            src_obj: 1,
-                            src_depth: 0,
-                            rights: 0,
-                            badge: 0,
-                        },
-                    );
-                    system_invocations.push(invocation);
-
-                    pd_page_descriptors.push((
-                        system_cap_address_mask | cap_slot,
-                        pd_idx,
-                        mp.vaddr,
-                        rights,
-                        attrs,
-                        mr_pages[mr].len() as u64,
-                        mr.page_bytes(),
-                    ));
-
-                    for idx in 0..mr_pages[mr].len() {
-                        cap_address_names.insert(
-                            system_cap_address_mask | (cap_slot + idx as u64),
-                            format!(
-                                "{} (derived)",
-                                cap_address_names
-                                    .get(&(mr_pages[mr][0].cap_addr + idx as u64))
-                                    .unwrap()
-                            ),
-                        );
-                    }
-
-                    cap_slot += mr_pages[mr].len() as u64;
+                    continue;
                 }
+
+                let mut invocation = Invocation::new(
+                    config,
+                    InvocationArgs::CnodeMint {
+                        cnode: system_cnode_cap,
+                        dest_index: cap_slot,
+                        dest_depth: system_cnode_bits,
+                        src_root: root_cnode_cap,
+                        src_obj: mr_pages[mr][0].cap_addr,
+                        src_depth: config.cap_address_bits,
+                        rights,
+                        badge: 0,
+                    },
+                );
+                invocation.repeat(
+                    mr_pages[mr].len() as u32,
+                    InvocationArgs::CnodeMint {
+                        cnode: 0,
+                        dest_index: 1,
+                        dest_depth: 0,
+                        src_root: 0,
+                        src_obj: 1,
+                        src_depth: 0,
+                        rights: 0,
+                        badge: 0,
+                    },
+                );
+                system_invocations.push(invocation);
+
+                pd_page_descriptors.push((
+                    system_cap_address_mask | cap_slot,
+                    pd_idx,
+                    mp.vaddr,
+                    rights,
+                    attrs,
+                    mr_pages[mr].len() as u64,
+                    mr.page_bytes(),
+                ));
+
+                for idx in 0..mr_pages[mr].len() {
+                    cap_address_names.insert(
+                        system_cap_address_mask | (cap_slot + idx as u64),
+                        format!(
+                            "{} (derived)",
+                            cap_address_names
+                                .get(&(mr_pages[mr][0].cap_addr + idx as u64))
+                                .unwrap()
+                        ),
+                    );
+                }
+
+                cap_slot += mr_pages[mr].len() as u64;
             }
         }
     }
