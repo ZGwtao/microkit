@@ -2080,12 +2080,23 @@ fn build_system(
 
     let vm_cnode_objs = &cnode_objs[system.protection_domains.len()..];
 
-    let bg_cnode_objs =
+    /*
+     * We assign each PD a background CNode for backing up capabilities
+     * Each template PD has reference to the background CNode of its children
+     * Children's access to its background CNode disappears when trusted loading is finished
+     *  -> and returns when template PD restarts the child...
+     * 
+     * FIXME:
+     *  -> it should not actually be this large (1024)
+     *  -> but it is ok for the parent (template PD) to have 1 cslot referencing the bgnode
+     *  -> (64 slots for 64 children is ideal?)
+     */
+    let bgnode_objs =
         init_system.allocate_objects(ObjectType::CNode, cnode_names_copy, Some(PD_CAP_SIZE));
-    let mut bg_cnode_objs_by_pd: HashMap<&ProtectionDomain, &Object> =
+    let mut bgnode_objs_by_pd: HashMap<&ProtectionDomain, &Object> =
         HashMap::with_capacity(system.protection_domains.len());
     for (i, pd) in system.protection_domains.iter().enumerate() {
-        bg_cnode_objs_by_pd.insert(pd, &bg_cnode_objs[i]);
+        bgnode_objs_by_pd.insert(pd, &bgnode_objs[i]);
     }
 
     let mut cap_slot = init_system.cap_slot;
@@ -2238,7 +2249,7 @@ fn build_system(
                     invocation = Invocation::new(
                         config,
                         InvocationArgs::CnodeMint {
-                            cnode: bg_cnode_objs[pd_idx].cap_addr,
+                            cnode: bgnode_objs[pd_idx].cap_addr,
                             dest_index: bg_mapping_cap_slot,
                             dest_depth: PD_CAP_BITS,
                             src_root: root_cnode_cap,
@@ -2542,7 +2553,7 @@ fn build_system(
         system_invocations.push(Invocation::new(
             config,
             InvocationArgs::CnodeMint {
-                cnode: bg_cnode_objs[idx].cap_addr,
+                cnode: bgnode_objs[idx].cap_addr,
                 dest_index: INPUT_CAP_IDX,
                 dest_depth: PD_CAP_BITS,
                 src_root: root_cnode_cap,
@@ -2638,7 +2649,7 @@ fn build_system(
             system_invocations.push(Invocation::new(
                 config,
                 InvocationArgs::CnodeMint {
-                    cnode: bg_cnode_objs[pd_idx].cap_addr,
+                    cnode: bgnode_objs[pd_idx].cap_addr,
                     dest_index: bg_cap_idx,
                     dest_depth: PD_CAP_BITS,
                     src_root: root_cnode_cap,
@@ -2737,7 +2748,7 @@ fn build_system(
                         system_invocations.push(Invocation::new(
                             config,
                             InvocationArgs::CnodeMint {
-                                cnode: bg_cnode_objs[maybe_child_idx].cap_addr,
+                                cnode: bgnode_objs[maybe_child_idx].cap_addr,
                                 dest_index: bg_cspace_cap_idx,
                                 dest_depth: PD_CAP_BITS,
                                 src_root: root_cnode_cap,
@@ -2747,21 +2758,6 @@ fn build_system(
                                 badge: 0,
                             },
                         ));
-                        //let bg_cnode_cap_idx = PD_TEMPLATE_BACKGROUND_CNODE;
-                        //assert!(bg_cnode_cap_idx < PD_CAP_SIZE);
-                        //system_invocations.push(Invocation::new(
-                        //    config,
-                        //    InvocationArgs::CnodeMint {
-                        //        cnode: cnode_objs[maybe_child_idx].cap_addr,
-                        //        dest_index: bg_cnode_cap_idx,
-                        //        dest_depth: PD_CAP_BITS,
-                        //        src_root: root_cnode_cap,
-                        //        src_obj: bg_cnode_objs[maybe_child_idx].cap_addr,
-                        //        src_depth: config.cap_address_bits,
-                        //        rights: Rights::All as u64,
-                        //        badge: 0,
-                        //    },
-                        //));
 
                         //let child_cnode_cap_idx = PD_TEMPLATE_CHILD_CNODE;
                         //assert!(child_cnode_cap_idx < PD_CAP_SIZE);
@@ -2800,7 +2796,7 @@ fn build_system(
                         system_invocations.push(Invocation::new(
                             config,
                             InvocationArgs::CnodeMint {
-                                cnode: bg_cnode_objs[maybe_child_idx].cap_addr,
+                                cnode: bgnode_objs[maybe_child_idx].cap_addr,
                                 dest_index: bg_vspace_cap_idx,
                                 dest_depth: PD_CAP_BITS,
                                 src_root: root_cnode_cap,
@@ -2833,7 +2829,7 @@ fn build_system(
                                 dest_index: PD_TEMPLATE_BACKGROUND_ROOT,
                                 dest_depth: PD_CAP_BITS,
                                 src_root: root_cnode_cap,
-                                src_obj: bg_cnode_objs[maybe_child_idx].cap_addr,
+                                src_obj: bgnode_objs[maybe_child_idx].cap_addr,
                                 src_depth: config.cap_address_bits,
                                 rights: Rights::All as u64,
                                 badge: 0,
@@ -2903,7 +2899,7 @@ fn build_system(
         for (send, recv) in [(&cc.end_a, &cc.end_b), (&cc.end_b, &cc.end_a)] {
             let send_pd = &system.protection_domains[send.pd];
             let send_cnode_obj = cnode_objs_by_pd[send_pd];
-            let bg_send_cnode_obj = bg_cnode_objs_by_pd[send_pd];
+            let bg_send_cnode_obj = bgnode_objs_by_pd[send_pd];
             let recv_notification_obj = &notification_objs[recv.pd];
 
             if send.notify {
@@ -3215,11 +3211,11 @@ fn build_system(
                 //));
 
                 /* back up in template's background CNode */
-                let bg_cnode_obj = &bg_cnode_objs[pd_idx];
+                let bgnode_obj = &bgnode_objs[pd_idx];
                 system_invocations.push(Invocation::new(
                     config,
                     InvocationArgs::CnodeMint {
-                        cnode: bg_cnode_obj.cap_addr,
+                        cnode: bgnode_obj.cap_addr,
                         dest_index: BACKGROUND_CNODE_TSLDR_CONTEXT_CAP,
                         dest_depth: PD_CAP_BITS,
                         src_root: root_cnode_cap,
