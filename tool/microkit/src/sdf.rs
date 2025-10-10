@@ -624,42 +624,6 @@ impl ProtectionDomain {
             ));
         }
 
-        if is_template {
-            // All template PDs must have exactly one child PD
-            if child_pds.len() != 1 {
-                return Err(format!(
-                    "Error: PD template '{}' must have exactly one child PD",
-                    name
-                ));
-            }
-
-            let child_pd = child_pds.last().unwrap();
-
-            // The trusted loader assumes that the child PD has an id of 1
-            if child_pd.id != Some(1) {
-                return Err(format!(
-                    "Error: PD template '{}' must have a child PD with id 1",
-                    name
-                ));
-            }
-        } else {
-            // // Children of non-template PDs must not have any optional IRQs or mappings
-            // for (_, child_pd) in child_pds.iter().enumerate() {
-            //     if child_pd.irqs.iter().any(|irq| irq.optional) {
-            //         return Err(format!(
-            //             "Error: PD '{}' has an optional IRQ, all IRQs must be required for children of non-template PDs",
-            //             name
-            //         ));
-            //     }
-            //     if child_pd.maps.iter().any(|map| map.optional) {
-            //         return Err(format!(
-            //             "Error: PD '{}' has an optional mapping, all mappings must be required for children of non-template PDs",
-            //             name
-            //         ));
-            //     }
-            // }
-        }
-
         let has_children = !child_pds.is_empty();
 
         Ok(ProtectionDomain {
