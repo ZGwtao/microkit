@@ -537,8 +537,8 @@ impl Default for MemoryMapping {
     }
 }
 
-#[repr(C)]
-pub struct TsldrMd {
+#[repr(C, align(4096))]
+pub struct TrustedLoaderMetadata {
     pub child_id: usize,
     pub system_hash: u64,
     pub public_key: [u8; 32],
@@ -555,9 +555,9 @@ pub struct TsldrMd {
            + std::mem::size_of::<MemoryMapping>() * 62
            + std::mem::size_of::<u8>())],                         // init
 }
-impl Default for TsldrMd {
+impl Default for TrustedLoaderMetadata {
     fn default() -> Self {
-        TsldrMd {
+        TrustedLoaderMetadata {
             child_id: 0,
             system_hash: 0,
             public_key: [0u8; 32],
@@ -577,6 +577,22 @@ impl Default for TsldrMd {
     }
 }
 
+#[repr(C)]
+pub struct TrustedLoaderMetadataArray {
+    /* maximum is 64 per monitor */
+    pub trusted_loader_md_array: [TrustedLoaderMetadata; 64],
+}
+impl Default for TrustedLoaderMetadataArray {
+    fn default() -> Self {
+        use std::array::from_fn;
+        let trusted_loader_md_array = from_fn(|i| {
+            let mut md = TrustedLoaderMetadata::default();
+            md.child_id = i as usize; // 0..63
+            md
+        });
+        TrustedLoaderMetadataArray { trusted_loader_md_array }
+    }
+}
 
 pub fn pd_write_symbols(
     pds: &[ProtectionDomain],
@@ -587,6 +603,10 @@ pub fn pd_write_symbols(
     public_key: Option<&[u8]>,
     system_hash: u64,
 ) -> Result<(), String> {
+
+    // FIXME: maximum 64 pd has optional mappings?
+    assert!(pd_optional_mappings.len() <= MAX_CHANNELS);
+
     for (pd_idx, pd) in pds.iter().enumerate() {
         let Some(program_image) = &pd.program_image else {
             continue;
@@ -599,85 +619,101 @@ pub fn pd_write_symbols(
         elf.write_symbol("microkit_passive", &[pd.passive as u8])?;
 
         if pd.is_template {
-            let mut md = TsldrMd::default();
-            let mut channels_to_remove = [0u64; MAX_CHANNELS];
-            let mut irqs_to_remove = [0u64; MAX_CHANNELS];
-            let mut mappings_to_remove = [OptionalMapping::default(); MAX_CHANNELS];
-            assert!(pd_optional_mappings.len() <= MAX_CHANNELS);
+            /*
+             * for each template PD, init a md_array
+             */
+            let mut md_array = TrustedLoaderMetadataArray::default();
+            /*
+             * for each md_array, fill in with child PDs
+             */
+            for (curr_idx, c) in pds.iter().enumerate() {
+                /*
+                 * if this is a child PD...
+                 */
+                if let Some(parent) = c.parent {
+                    /*
+                     * and the parent of the child PD is a template PD...
+                     */
+                    if parent == pd_idx {
+                        let mut channels_to_remove = [0u64; MAX_CHANNELS];
+                        let mut irqs_to_remove = [0u64; MAX_CHANNELS];
+                        let mut mappings_to_remove = [OptionalMapping::default(); MAX_CHANNELS];
 
-            let child_idx = pds.iter().position(|pd| pd.parent == Some(pd_idx)).unwrap();
+                        // id of a child is local to the template PD namespace
+                        // child_idx != curr_idx, the latter is the global idx of all PDs...
+                        let child_idx = c.id.unwrap() as usize;
 
-            for (mapping_idx, mapping) in pd_optional_mappings
-                .get(&pd_idx)
-                .unwrap()
-                .iter()
-                .enumerate()
-            {
-                mappings_to_remove[mapping_idx] = mapping.clone();
-                println!("Optional mapping for PD '{}' found (vaddr=0x{:x} page=0x{:x} number_of_pages={} page_size=0x{:x} rights=0x{:x} attrs=0x{:x})",
-                    pds[child_idx].name,
-                    mapping.vaddr,
-                    mapping.page,
-                    mapping.number_of_pages,
-                    mapping.page_size,
-                    mapping.rights,
-                    mapping.attrs,
-                );
-            }
+                        for (mapping_idx, mapping) in pd_optional_mappings
+                            .get(&child_idx)
+                            .unwrap()
+                            .iter()
+                            .enumerate()
+                        {
+                            mappings_to_remove[mapping_idx] = mapping.clone();
+                            println!("Optional mapping for PD '{}' found (vaddr=0x{:x} page=0x{:x} number_of_pages={} page_size=0x{:x} rights=0x{:x} attrs=0x{:x})",
+                                pds[curr_idx].name, /* still use the global index for this child PD */
+                                mapping.vaddr,
+                                mapping.page,
+                                mapping.number_of_pages,
+                                mapping.page_size,
+                                mapping.rights,
+                                mapping.attrs,
+                            );
+                        }
 
-            for channel in channels.iter().filter(|c| c.optional) {
-                // We already enforce that the two ends of an optional channel are both children of template PDs
-                if channel.end_a.pd == child_idx {
-                    println!(
-                        "Optional channel for PD '{}' found (id={})",
-                        pds[child_idx].name, channel.end_a.id
-                    );
-                    channels_to_remove[channel.end_a.id as usize] = 1;
-                } else if channel.end_b.pd == child_idx {
-                    println!(
-                        "Optional channel for PD '{}' found (id={})",
-                        pds[child_idx].name, channel.end_b.id
-                    );
-                    channels_to_remove[channel.end_b.id as usize] = 1;
+                        for channel in channels.iter().filter(|c| c.optional) {
+                            // We already enforce that the two ends of an optional channel are both children of template PDs
+                            if channel.end_a.pd == curr_idx {
+                                println!(
+                                    "Optional channel for PD '{}' found (id={})",
+                                    pds[curr_idx].name, channel.end_a.id
+                                );
+                                channels_to_remove[channel.end_a.id as usize] = 1;
+                            } else if channel.end_b.pd == curr_idx {
+                                println!(
+                                    "Optional channel for PD '{}' found (id={})",
+                                    pds[curr_idx].name, channel.end_b.id
+                                );
+                                channels_to_remove[channel.end_b.id as usize] = 1;
+                            }
+                        }
+
+                        for irq in pds[curr_idx].irqs.iter().filter(|irq| irq.optional) {
+                            println!(
+                                "Optional IRQ for PD '{}' found (id={} irq={})",
+                                pds[curr_idx].name, irq.id, irq.irq
+                            );
+                            irqs_to_remove[irq.id as usize] = 1;
+                        }
+
+                        assert!(md_array.trusted_loader_md_array[child_idx].child_id == child_idx);
+
+                        md_array.trusted_loader_md_array[child_idx].channels.copy_from_slice(&channels_to_remove);
+                        md_array.trusted_loader_md_array[child_idx].irqs.copy_from_slice(&irqs_to_remove);
+                        md_array.trusted_loader_md_array[child_idx].system_hash = system_hash;
+
+                        for (i, om) in mappings_to_remove.iter().enumerate() {
+                            md_array.trusted_loader_md_array[child_idx].mappings[i] = MemoryMapping {
+                                vaddr: om.vaddr,
+                                page: om.page,
+                                number_of_pages: om.number_of_pages,
+                                page_size: om.page_size,
+                                rights: om.rights,
+                                attrs: om.attrs,
+                            };
+                        }
+                        if let Some(pk) = public_key {
+                            md_array.trusted_loader_md_array[child_idx].public_key[..pk.len()].copy_from_slice(pk);
+                            let pk_hex = pk.iter().map(|byte| format!("{:02x}", byte)).collect::<String>();
+                            println!(
+                                "Public key written to PD '{}' (length {} bytes): 0x{}",
+                                pd.name, pk.len(), pk_hex
+                            );
+                        }
+                    }
                 }
             }
-
-            for irq in pds[child_idx].irqs.iter().filter(|irq| irq.optional) {
-                println!(
-                    "Optional IRQ for PD '{}' found (id={} irq={})",
-                    pds[child_idx].name, irq.id, irq.irq
-                );
-                irqs_to_remove[irq.id as usize] = 1;
-            }
-
-            //elf.write_symbol("channels", unsafe { struct_to_bytes(&channels_to_remove) })?;
-            //elf.write_symbol("irqs", unsafe { struct_to_bytes(&irqs_to_remove) })?;
-            //elf.write_symbol("mappings", unsafe { struct_to_bytes(&mappings_to_remove) })?;
-            md.channels.copy_from_slice(&channels_to_remove);
-            md.irqs.copy_from_slice(&irqs_to_remove);
-            md.system_hash = system_hash;
-            // FIXME
-            md.child_id = child_idx;
-
-            for (i, om) in mappings_to_remove.iter().enumerate() {
-                md.mappings[i] = MemoryMapping {
-                    vaddr: om.vaddr,
-                    page: om.page,
-                    number_of_pages: om.number_of_pages,
-                    page_size: om.page_size,
-                    rights: om.rights,
-                    attrs: om.attrs,
-                };
-            }
-            if let Some(pk) = public_key {
-                md.public_key[..pk.len()].copy_from_slice(pk);
-                let pk_hex = pk.iter().map(|byte| format!("{:02x}", byte)).collect::<String>();
-                println!(
-                    "Public key written to PD '{}' (length {} bytes): 0x{}",
-                    pd.name, pk.len(), pk_hex
-                );
-            }
-            elf.write_symbol("tsldr_metadata_patched", unsafe { struct_to_bytes(&md) })?;
+            elf.write_symbol("tsldr_metadata_patched", unsafe { struct_to_bytes(&md_array) })?;
         }
 
         for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {
@@ -2203,16 +2239,22 @@ fn build_system(
 
                 /* try to backup optional mappings... */
                 if mp.optional {
-                    let parent_idx = pd.parent.expect(&format!(
-                                        "Map for PD memory region '{}' at vaddr=0x{:x} for PD '{}' is optional but there is no parent template PD",
-                                        mp.mr, mp.vaddr, pd.name
-                                    ));
+                    /* to check if it is a child of a template PD */
+                    let parent_idx = 
+                        pd.parent.expect(&format!(
+                            "Map for PD memory region '{}' at vaddr=0x{:x} for PD '{}' is optional but there is no parent template PD",
+                            mp.mr, mp.vaddr, pd.name
+                        ));
                     let parent_pd = &system.protection_domains[parent_idx];
-                    assert!(parent_pd.is_template, "Map for memory region '{}' at vaddr=0x{:x} for PD '{}' is optional but parent PD '{}' is not a template PD", mp.mr, mp.vaddr, pd.name, parent_pd.name);
+                    assert!(
+                        parent_pd.is_template,
+                        "Map for memory region '{}' at vaddr=0x{:x} for PD '{}' is optional but parent PD '{}' is not a template PD",
+                        mp.mr, mp.vaddr, pd.name, parent_pd.name
+                    );
 
                     /* the context is mapped to a page in template PD's address space... */
                     pd_optional_mappings
-                        .get_mut(&parent_idx) // FIXME: parent can have more than one child...
+                        .get_mut(&pd_idx) // FIXME: parent can have more than one child...
                         .unwrap()
                         .push(OptionalMapping {
                             vaddr: mp.vaddr,    /* page: just the offset of the mapping begins at 0... */
