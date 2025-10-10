@@ -28,8 +28,8 @@ uintptr_t shared3;
 seL4_Word system_hash;
 unsigned char public_key[PUBLIC_KEY_BYTES];
 
-/* 4KB in size */
-tsldr_md_t tsldr_metadata_patched;
+/* 4KB * 64 in size */
+tsldr_md_array_t tsldr_metadata_patched;
 /*
  * A shared memory region with container, containing content from tsldr_metadata_patched
  * Will be init each time the container restarts by copying the data from above
@@ -91,9 +91,9 @@ seL4_MessageInfo_t monitor_call_debute(void)
     microkit_dbg_printf(PROGNAME "Verified ELF header\n");
 
     /* init metadata for proto-container's tsldr */
-    tsldr_init_metadata(&tsldr_metadata_patched);
+    tsldr_init_metadata(&tsldr_metadata_patched, 1);
 
-    seL4_Error error = tsldr_grant_cspace_access(tsldr_metadata_patched.child_id);
+    seL4_Error error = tsldr_grant_cspace_access(1);
     if (error != seL4_NoError) {
         return microkit_msginfo_new(error, 0);
     }
@@ -116,9 +116,9 @@ seL4_MessageInfo_t monitor_call_debute(void)
 seL4_MessageInfo_t monitor_call_restart(void)
 {
     /* init metadata for proto-container's tsldr */
-    tsldr_init_metadata(&tsldr_metadata_patched);
+    tsldr_init_metadata(&tsldr_metadata_patched, 1);
 
-    seL4_Error error = tsldr_grant_cspace_access(tsldr_metadata_patched.child_id);
+    seL4_Error error = tsldr_grant_cspace_access(1);
     if (error != seL4_NoError) {
         return microkit_msginfo_new(error, 0);
     }

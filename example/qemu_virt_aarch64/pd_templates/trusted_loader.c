@@ -19,7 +19,7 @@
 #define PROGNAME "[trusted_loader] "
 
 /* patched externally by microkit tool */
-tsldr_md_t tsldr_metadata_patched;
+tsldr_md_array_t tsldr_metadata_patched;
 /* dummy def */
 tsldr_md_t *tsldr_metadata;
 /* ? */
@@ -43,7 +43,7 @@ trusted_loader_t loader_context;
 void init(void)
 {
     tsldr_metadata = &tsldr_monitor_metadata;
-    tsldr_init_metadata(&tsldr_metadata_patched);
+    tsldr_init_metadata(&tsldr_metadata_patched, 1);
     microkit_dbg_printf(PROGNAME "Entered init\n");
 
     tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
