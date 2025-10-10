@@ -43,12 +43,12 @@ trusted_loader_t loader_context;
 void init(void)
 {
     tsldr_metadata = &tsldr_monitor_metadata;
-    tsldr_init_metadata(&tsldr_metadata_patched, 1);
+    tsldr_init_metadata(&tsldr_metadata_patched, 2);
     microkit_dbg_printf(PROGNAME "Entered init\n");
 
     tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
 
-    tsldr_init(&loader_context, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
+    tsldr_init(&loader_context, md->child_id, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
     custom_memcpy(loader_context.public_key, md->public_key, sizeof(md->public_key));
     loader_context.flags.init = true;
 
@@ -124,7 +124,8 @@ seL4_MessageInfo_t monitor_call_debute(void)
     microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
 
     // Restart the child PD at the entry point
-    microkit_pd_restart(PD_TEMPLATE_CHILD_TCB, ehdr->e_entry);
+    microkit_dbg_printf(PROGNAME "Restart child PD with ID: %d\n", loader_context.child_id);
+    microkit_pd_restart(loader_context.child_id, ehdr->e_entry);
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
     return microkit_msginfo_new(seL4_NoError, 0);
 }
@@ -135,7 +136,7 @@ seL4_MessageInfo_t monitor_call_restart(void)
 
     /* set a flag for the trusted loader to check whether to boot or to restart... */
     microkit_dbg_printf(PROGNAME "Restart template PD without reloading trusted loader\n");
-    microkit_pd_restart(PD_TEMPLATE_CHILD_TCB, ehdr->e_entry);
+    microkit_pd_restart(loader_context.child_id, ehdr->e_entry);
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
 
     return microkit_msginfo_new(seL4_NoError, 0);
