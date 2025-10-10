@@ -65,7 +65,7 @@
             <map mr="client_test"   vaddr="0xC000000" perms="rwx" cached="true" optional="true" />
             <map mr="test_test"     vaddr="0xD000000" perms="rwx" cached="true" optional="true" />
 
-            <irq irq="0" id="5" optional="true" />
+            <irq irq="0" id="15" optional="true" />
         </protection_domain>
     </template>
 
@@ -92,6 +92,10 @@
         <protection_domain name="sender" id="1" priority="251">
             <map mr="sender_program" vaddr="0x200000" perms="rwx" cached="true" />
         </protection_domain>
+
+        <protection_domain name="sender2" id="2" priority="251">
+            <map mr="sender_program" vaddr="0x200000" perms="rwx" cached="true" />
+        </protection_domain>
     </template>
 
     <channel optional="true">
@@ -103,6 +107,17 @@
         <end pd="sender" id="2" />
         <end pd="proto-container" id="3" />
     </channel>
+
+    <channel optional="true">
+        <end pd="sender2" id="1" />
+        <end pd="proto-container" id="4" />
+    </channel>
+
+    <channel optional="true">
+        <end pd="sender2" id="2" />
+        <end pd="proto-container" id="5" />
+    </channel>
+
 
     <channel>
         <end pd="frontend" id="1" pp="true" />

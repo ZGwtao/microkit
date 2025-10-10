@@ -7,7 +7,10 @@ void init(void)
 
     *((seL4_Word *)0xD000000) = 0x10;
 
+    microkit_notify(5);
+    microkit_notify(4);
     microkit_notify(3);
+    microkit_notify(2);
 }
 
 void notified(microkit_channel ch)

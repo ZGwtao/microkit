@@ -23,7 +23,7 @@ tsldr_md_array_t tsldr_metadata_patched;
 /* dummy def */
 tsldr_md_t *tsldr_metadata;
 /* ? */
-static tsldr_md_t tsldr_monitor_metadata;
+static tsldr_md_t md_array[64];
 
 uintptr_t container_exec;
 uintptr_t container_elf;
@@ -33,24 +33,54 @@ uintptr_t shared2;
 seL4_Word system_hash;
 unsigned char public_key[PUBLIC_KEY_BYTES];
 
-seL4_MessageInfo_t monitor_call_debute(void);
-seL4_MessageInfo_t monitor_call_restart(void);
+seL4_MessageInfo_t monitor_call_debute(size_t id);
+seL4_MessageInfo_t monitor_call_restart(size_t id);
 
 /* trusted loader context */
-trusted_loader_t loader_context;
+// this is not mapped to 0xE00000, and is used statically
+static trusted_loader_t loader_context[64];
+
+/* available child id bitmap */
+static int child_map[64];
 
 
 void init(void)
 {
-    tsldr_metadata = &tsldr_monitor_metadata;
-    tsldr_init_metadata(&tsldr_metadata_patched, 2);
     microkit_dbg_printf(PROGNAME "Entered init\n");
 
-    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+    // maximum 64 children PD per template PD
+    custom_memset(loader_context, 0, sizeof(trusted_loader_t) * 64);
+    custom_memset(md_array, 0, sizeof(tsldr_md_t) * 64);
+    custom_memset(child_map, 0, sizeof(int) * 64);
 
-    tsldr_init(&loader_context, md->child_id, ed25519_verify, md->system_hash, sizeof(seL4_Word), 64);
-    custom_memcpy(loader_context.public_key, md->public_key, sizeof(md->public_key));
-    loader_context.flags.init = true;
+    for (int i = 0; i < 64; ++i) {
+        // must provide valid hash to 
+        if (tsldr_metadata_patched.md_array[i].system_hash != system_hash) {
+            // do not initialise unspecified tsldr metadata
+            continue;
+        }
+        // adjust global pointer
+        tsldr_metadata = (tsldr_md_t *)(md_array + i);
+        // initialise the target tsldr_metadata
+        tsldr_init_metadata(&tsldr_metadata_patched, i);
+
+        // set valid bit
+        child_map[i] = 1;        
+
+        // init trusted loader ...
+        tsldr_init(
+            loader_context + i,
+            tsldr_metadata->child_id,
+            ed25519_verify,
+            tsldr_metadata->system_hash,
+            sizeof(seL4_Word),
+            64
+        );
+
+        custom_memcpy(loader_context[i].public_key, tsldr_metadata->public_key, sizeof(tsldr_metadata->public_key));
+
+        loader_context[i].flags.init = true;
+    }
 
     microkit_dbg_printf(PROGNAME "Finished init\n");
 }
@@ -64,29 +94,46 @@ seL4_MessageInfo_t protected(microkit_channel ch, microkit_msginfo msginfo)
 {
     microkit_dbg_printf(PROGNAME "Received protected message on channel: %d\n", ch);
 
+    seL4_MessageInfo_t ret;
+
     /* get the first word of the message */
     seL4_Word monitorcall_number = microkit_mr_get(0);
 
-    seL4_MessageInfo_t ret;
+    // get the container ID to handle
+    size_t container_id = microkit_mr_get(1);
+
+    // sanity check
+    if (container_id >= 64) {
+        microkit_dbg_printf(PROGNAME "Invalid container ID given: %d", container_id);
+        // do nothing...
+        return ret;
+    }
+    if (child_map[container_id] != 1) {
+        microkit_dbg_printf(PROGNAME "Invalid container ID given: %d", container_id);
+        // do nothing...
+        return ret;
+    }
 
     /* call for the container monitor */
     switch (monitorcall_number) {
     case 1:
         microkit_dbg_printf(PROGNAME "Loading trusted loader and the first client\n");
-        ret = monitor_call_debute();
+        ret = monitor_call_debute(container_id);
         break;
     case 2:
         microkit_dbg_printf(PROGNAME "Restart trusted loader and a new client\n");
-        ret = monitor_call_restart();
+        ret = monitor_call_restart(container_id);
         break;
     default:
-        ;
+        microkit_dbg_printf(PROGNAME "Invalid monitor call given: %d\n", monitorcall_number);
+        // do nothing if invalid syscall number is given
+        break;
     }
 
     return ret;
 }
 
-seL4_MessageInfo_t monitor_call_debute(void)
+seL4_MessageInfo_t monitor_call_debute(size_t id)
 {
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
@@ -106,37 +153,37 @@ seL4_MessageInfo_t monitor_call_debute(void)
         microkit_internal_crash(error);
     }
 
-    error = tsldr_populate_rights(&loader_context, (unsigned char *)section, section_size);
+    error = tsldr_populate_rights(&loader_context[id], (unsigned char *)section, section_size);
     if (error != seL4_NoError) {
         return microkit_msginfo_new(error, 0);
     }
 
-    tsldr_restore_caps(&loader_context, false);
+    tsldr_restore_caps(&loader_context[id], false);
 
     //error = populate_allowed(&access_rights);
-    error = tsldr_populate_allowed(&loader_context);
+    error = tsldr_populate_allowed(&loader_context[id]);
     if (error != seL4_NoError) {
         return microkit_msginfo_new(error, 0);
     }
-    tsldr_remove_caps(&loader_context, false);
+    tsldr_remove_caps(&loader_context[id], false);
 
     load_elf((void*)container_exec, ehdr);
     microkit_dbg_printf(PROGNAME "Copied program to child PD's memory region\n");
 
     // Restart the child PD at the entry point
-    microkit_dbg_printf(PROGNAME "Restart child PD with ID: %d\n", loader_context.child_id);
-    microkit_pd_restart(loader_context.child_id, ehdr->e_entry);
+    microkit_dbg_printf(PROGNAME "Restart child PD with ID: %d\n", loader_context[id].child_id);
+    microkit_pd_restart(loader_context[id].child_id, ehdr->e_entry);
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
     return microkit_msginfo_new(seL4_NoError, 0);
 }
 
-seL4_MessageInfo_t monitor_call_restart(void)
+seL4_MessageInfo_t monitor_call_restart(size_t id)
 {
     Elf64_Ehdr *ehdr = (Elf64_Ehdr *)shared1;
 
     /* set a flag for the trusted loader to check whether to boot or to restart... */
     microkit_dbg_printf(PROGNAME "Restart template PD without reloading trusted loader\n");
-    microkit_pd_restart(loader_context.child_id, ehdr->e_entry);
+    microkit_pd_restart(loader_context[id].child_id, ehdr->e_entry);
     microkit_dbg_printf(PROGNAME "Started child PD at entrypoint address: 0x%x\n", (unsigned long long)ehdr->e_entry);
 
     return microkit_msginfo_new(seL4_NoError, 0);

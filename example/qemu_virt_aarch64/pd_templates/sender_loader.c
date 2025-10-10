@@ -29,7 +29,18 @@ void init(void)
     seL4_Error error;
     
     microkit_mr_set(0, 1);
-    info = microkit_ppcall(1, microkit_msginfo_new(0, 1));
+    /* setup the first container */
+    microkit_mr_set(1, 1);
+    info = microkit_ppcall(1, microkit_msginfo_new(0, 2));
+    error = microkit_msginfo_get_label(info);
+    if (error != seL4_NoError) {
+        microkit_internal_crash(error);
+    }
+
+    microkit_mr_set(0, 1);
+    /* setup the second container */
+    microkit_mr_set(1, 2);
+    info = microkit_ppcall(1, microkit_msginfo_new(0, 2));
     error = microkit_msginfo_get_label(info);
     if (error != seL4_NoError) {
         microkit_internal_crash(error);
