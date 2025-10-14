@@ -537,7 +537,7 @@ impl Default for MemoryMapping {
     }
 }
 
-#[repr(C, align(4096))]
+#[repr(C)]
 pub struct TrustedLoaderMetadata {
     pub child_id: usize,
     pub system_hash: u64,
@@ -579,6 +579,7 @@ impl Default for TrustedLoaderMetadata {
 
 #[repr(C)]
 pub struct TrustedLoaderMetadataArray {
+    pub avail_trusted_loader: u8,
     /* maximum is 64 per monitor */
     pub trusted_loader_md_array: [TrustedLoaderMetadata; 64],
 }
@@ -590,7 +591,7 @@ impl Default for TrustedLoaderMetadataArray {
             md.child_id = i as usize; // 0..63
             md
         });
-        TrustedLoaderMetadataArray { trusted_loader_md_array }
+        TrustedLoaderMetadataArray { avail_trusted_loader: 0, trusted_loader_md_array }
     }
 }
 
@@ -710,6 +711,7 @@ pub fn pd_write_symbols(
                                 pd.name, pk.len(), pk_hex
                             );
                         }
+                        md_array.avail_trusted_loader += 1;
                     }
                 }
             }
