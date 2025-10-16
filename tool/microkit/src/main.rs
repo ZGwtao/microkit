@@ -645,7 +645,7 @@ pub fn pd_write_symbols(
                         let child_idx = c.id.unwrap() as usize;
 
                         for (mapping_idx, mapping) in pd_optional_mappings
-                            .get(&child_idx)
+                            .get(&curr_idx)
                             .unwrap()
                             .iter()
                             .enumerate()
@@ -2299,6 +2299,7 @@ fn build_system(
 
                     // Ensure mapping_cap_slot does not exceed PD_CAP_SIZE, should be <= here because we check after incrementing it
                     bg_mapping_cap_slot += mr_pages[mr].len() as u64;
+                    println!("current bg mapping cap slot: {}, {}, {}", bg_mapping_cap_slot, pd.name, mr_pages[mr].len());
                     assert!(bg_mapping_cap_slot <= PD_CAP_SIZE);
 
                     continue;
