@@ -118,13 +118,13 @@ pub struct SysIrq {
     pub optional: bool,
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub enum SysSetVarKind {
     Vaddr { address: u64 },
     Paddr { region: String },
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash, Clone)]
 pub struct SysSetVar {
     pub symbol: String,
     pub kind: SysSetVarKind,
@@ -171,6 +171,8 @@ pub struct ProtectionDomain {
     pub parent: Option<usize>,
     /// Location in the parsed SDF file
     text_pos: roxmltree::TextPos,
+    /// access rights groups
+    pub acgrps: Vec<AccessRightsDomain>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -451,6 +453,7 @@ impl ProtectionDomain {
         let mut irqs = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
+        let mut acgrps = Vec::new();
 
         let mut program_image = None;
         let mut virtual_machine = None;
@@ -616,9 +619,15 @@ impl ProtectionDomain {
                     virtual_machine = Some(VirtualMachine::from_xml(config, xml_sdf, &child)?);
                 }
                 "acgroup" => {
-                    let acrs = AccessRightsDomain::from_xml(config, xml_sdf, &child, stack_size)?;
-                    //acrs_dms.push(acrs);
-                    maps.append(&mut acrs.maps.clone());
+                    let accrss_group = AccessRightsDomain::from_xml(config, xml_sdf, &child, stack_size)?;
+
+                    println!("length old = {}", maps.len());
+                    // push all elements scanned from acgroup to parent PD...
+                    maps.extend(accrss_group.maps.iter().cloned());
+                    setvars.extend(accrss_group.setvars.iter().cloned());
+
+                    println!("length new = {}", maps.len());
+                    acgrps.push(accrss_group);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
@@ -662,6 +671,7 @@ impl ProtectionDomain {
             is_template,
             parent: None,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+            acgrps,
         })
     }
 }
@@ -673,8 +683,8 @@ impl AccessRightsDomain {
         node: &roxmltree::Node,
         stack_size: u64,
     ) -> Result<AccessRightsDomain, String> {
-
-        let id = if let Some(acrs_id) = node.attribute("id") {
+        // get group id from XML file
+        let id = if let Some(acrs_id) = node.attribute("gid") {
             sdf_parse_number(acrs_id, node)?
         } else {
             0
@@ -1013,35 +1023,6 @@ impl Channel {
                     "optional must be 'true' or 'false'".to_string(),
                 )
             })?;
-
-        // Ensure that the PDs are children of templates if the channel is optional,
-        // as we can only remove the output notification cap if the parent PD is a template
-        // and we must remove the cap from both ends of the channel.
-        let is_optional = |end: &ChannelEnd| match pds[end.pd].parent {
-            Some(parent_idx) => pds[parent_idx].is_template,
-            None => false,
-        };
-
-        let is_end_a_optional = is_optional(end_a);
-        let is_end_b_optional = is_optional(end_b);
-
-        if optional {
-            if !is_end_a_optional || !is_end_b_optional {
-                return Err(value_error(
-                    xml_sdf,
-                    node,
-                    "optional channels must connect children of template PDs".to_string(),
-                ));
-            }
-        } else {
-            //if is_end_a_optional || is_end_b_optional {
-            //    return Err(value_error(
-            //        xml_sdf,
-            //        node,
-            //        "non-optional channels must not connect children of template PDs".to_string(),
-            //    ));
-            //}
-        }
 
         if end_a.pp && end_b.pp {
             return Err(value_error(
