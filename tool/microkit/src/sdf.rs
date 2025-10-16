@@ -615,7 +615,7 @@ impl ProtectionDomain {
 
                     virtual_machine = Some(VirtualMachine::from_xml(config, xml_sdf, &child)?);
                 }
-                "access_rights_domain" => {
+                "acgroup" => {
                     let acrs = AccessRightsDomain::from_xml(config, xml_sdf, &child, stack_size)?;
                     //acrs_dms.push(acrs);
                     maps.append(&mut acrs.maps.clone());
