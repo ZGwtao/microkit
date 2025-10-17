@@ -538,6 +538,23 @@ impl Default for MemoryMapping {
 }
 
 #[repr(C)]
+#[derive(Copy, Clone)]
+pub struct StrippedMapping {
+    pub vaddr: u64,
+    pub number_of_pages: u64,
+    pub page_size: u64,
+}
+impl Default for StrippedMapping {
+    fn default() -> Self {
+        StrippedMapping {
+            vaddr: 0,
+            number_of_pages: 0,
+            page_size: 0,
+        }
+    }
+}
+
+#[repr(C)]
 pub struct TrustedLoaderMetadata {
     pub child_id: usize,
     pub system_hash: u64,
@@ -595,6 +612,70 @@ impl Default for TrustedLoaderMetadataArray {
     }
 }
 
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct AcGrp {
+    pub grp_init:   bool,
+    pub grp_idx:    u8,
+    pub grp_type:   u8,
+    pub channels:   [u64; 8],
+    pub irqs:       [u64; 8],
+    pub mappings:   [StrippedMapping; 16],
+}
+impl Default for AcGrp {
+    fn default() -> Self {
+        AcGrp {
+            grp_init:   false,
+            grp_idx:    0,
+            grp_type:   0,
+            channels:   [0u64; 8],
+            irqs:       [0u64; 8],
+            mappings:   [StrippedMapping::default(); 16],
+        }
+    }
+}
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct AcGrpArr {
+    pub pd_idx: u8,
+    // number of available grps in the list...
+    // FIXME: sequential ID required
+    pub grp_num: u8,
+    // FIXME: I don't think have 64 acgroups is practical...
+    pub array: [AcGrp; 32],
+}
+impl Default for AcGrpArr {
+    fn default() -> Self {
+        use std::array::from_fn;
+        let arr = from_fn(|_| {
+            let grp = AcGrp::default();
+            grp
+        });
+        AcGrpArr { pd_idx: 0, grp_num: 0, array: arr }
+    }
+}
+
+#[repr(C)]
+pub struct AcGrpArrList {
+    // FIXME: we are assuming all acg_arr IDs are sequential
+    pub num: usize,
+    // FIXME: also 64 child PD is not practical...
+    pub list: [AcGrpArr; 16],
+}
+impl Default for AcGrpArrList {
+    fn default() -> Self {
+        use std::array::from_fn;
+        let arr_list = from_fn(|i| {
+            let mut grp_arr = AcGrpArr::default();
+            grp_arr.pd_idx = i as u8;
+            grp_arr
+        });
+        AcGrpArrList { num: 0, list: arr_list }
+    }
+}
+
 pub fn pd_write_symbols(
     pds: &[ProtectionDomain],
     channels: &[Channel],
@@ -622,8 +703,12 @@ pub fn pd_write_symbols(
         if pd.is_template {
             /*
              * for each template PD, init a md_array
+             * and an acgrp_array_array recording each template PD's arrays of acgrp_array
+             *  : each element of the acgrp_array_array is an array of acgrps of a child PD
              */
             let mut md_array = TrustedLoaderMetadataArray::default();
+            let mut acg_arr_list = AcGrpArrList::default();
+            //let acg_arr_list = AcGrp::default();
             /*
              * for each md_array, fill in with child PDs
              */
@@ -716,6 +801,56 @@ pub fn pd_write_symbols(
                 }
             }
             elf.write_symbol("tsldr_metadata_patched", unsafe { struct_to_bytes(&md_array) })?;
+
+            for (curr_idx, c) in pds.iter().enumerate() {
+                if let Some(parent) = c.parent {
+                    if parent == pd_idx {
+                        // define each child PD's acgroup array here]
+
+                        let mut acg_arr = AcGrpArr::default();
+                        acg_arr.pd_idx = c.id.unwrap() as u8;
+
+                        // for each child PD, iterate its acg list
+                        // init an acg_arr variable with the elements of each acg in the acg list
+                        for (acg_idx, a) in c.acgrps.iter().enumerate() {
+                            // init acg type
+                            acg_arr.array[acg_idx].grp_type = a.grp_type as u8;
+                            acg_arr.array[acg_idx].grp_idx = acg_idx as u8;
+                            // get mapping elements
+                            for (m_idx, mapping) in a.maps.iter().enumerate() {
+                                for (_, global_mapping) in pd_optional_mappings
+                                    .get(&curr_idx)
+                                    .unwrap()
+                                    .iter()
+                                    .enumerate()
+                                {
+                                    if mapping.vaddr == global_mapping.vaddr {
+                                        acg_arr.array[acg_idx].mappings[m_idx] =
+                                            StrippedMapping {
+                                                vaddr: global_mapping.vaddr,
+                                                number_of_pages: global_mapping.number_of_pages,
+                                                page_size: global_mapping.page_size,
+                                            };
+                                        break;
+                                    }
+                                }
+                            }
+                            // TODO... (irqs and channels)
+
+                            // init acg state
+                            acg_arr.array[acg_idx].grp_init = true;
+                            acg_arr.grp_num += 1;
+                        }
+                        assert!(acg_arr.grp_num == c.acgrps.len() as u8);
+
+                        // (when every acg_arr is initialised)
+                        // and it to the global acg_array per template PD
+                        acg_arr_list.list[acg_arr_list.num] = acg_arr.clone();
+                        acg_arr_list.num += 1;
+                    }
+                }
+            }
+            elf.write_symbol("acgrp_metadata_patched", unsafe { struct_to_bytes(&acg_arr_list) })?;
         }
 
         for (setvar_idx, setvar) in pd.setvars.iter().enumerate() {

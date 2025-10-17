@@ -177,7 +177,8 @@ pub struct ProtectionDomain {
 
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct AccessRightsDomain {
-    pub id: u64,
+    pub id: u8,
+    pub grp_type: u8,
     pub maps: Vec<SysMap>,
     pub setvars: Vec<SysSetVar>,
 }
@@ -685,12 +686,21 @@ impl AccessRightsDomain {
     ) -> Result<AccessRightsDomain, String> {
         // get group id from XML file
         let id = if let Some(acrs_id) = node.attribute("gid") {
-            sdf_parse_number(acrs_id, node)?
+            sdf_parse_number(acrs_id, node)? as u8
         } else {
             0
         };
 
-        let mut maps = Vec::new();
+        // get acgroup type (like FS/serial/network...)
+        let acg_type = if let Some(grp_type) = node.attribute("grp_type") {
+            sdf_parse_number(grp_type, node)? as u8
+        } else {
+            8
+        };
+
+        // TODO: get acgroup name...
+
+        let mut maps: Vec<SysMap> = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
     
         for child in node.children() {
@@ -728,7 +738,7 @@ impl AccessRightsDomain {
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
-                        "Invalid XML element '{}': {}",
+                        "Invalid XML element '{}' for access rights group: {}",
                         child.tag_name().name(),
                         loc_string(xml_sdf, pos)
                     ));
@@ -738,8 +748,8 @@ impl AccessRightsDomain {
 
         Ok(AccessRightsDomain {
             id,
+            grp_type: acg_type,
             maps,
-            //channel_ends,
             //irqs,
             setvars,
         })
