@@ -613,15 +613,76 @@ impl Default for TrustedLoaderMetadataArray {
 }
 
 
+pub const MAX_NAME: usize = 63;
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct DataNameCStr {
+    pub bytes: [u8; MAX_NAME + 1], // always null-terminated
+}
+
+impl Default for DataNameCStr {
+    #[inline]
+    fn default() -> Self { Self { bytes: [0; MAX_NAME + 1] } }
+}
+
+impl DataNameCStr {
+    /// Set name; errors if `s.len() > MAX_NAME`.
+    #[inline]
+    pub fn set(&mut self, s: &str) -> Result<(), ()> {
+        let n = s.as_bytes().len();
+        if n > MAX_NAME { return Err(()); }
+        // write bytes
+        self.bytes[..n].copy_from_slice(s.as_bytes());
+        // write terminator and clear the tail (optional but neat)
+        self.bytes[n] = 0;
+        if n + 1 < self.bytes.len() {
+            self.bytes[n + 1..].fill(0);
+        }
+        Ok(())
+    }
+
+    /// Truncating setter (keeps API total if you prefer no Result).
+    #[inline]
+    pub fn set_trunc(&mut self, s: &str) {
+        let n = core::cmp::min(s.len(), MAX_NAME);
+        self.bytes[..n].copy_from_slice(&s.as_bytes()[..n]);
+        self.bytes[n] = 0;
+        if n + 1 < self.bytes.len() {
+            self.bytes[n + 1..].fill(0);
+        }
+    }
+
+    /// Returns as &str (UTF-8). Safe because we only accept &str on input.
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        let n = self.bytes.iter().position(|&b| b == 0).unwrap_or(self.bytes.len());
+        // Safety: constructed from &str; we never write non-UTF8.
+        unsafe { str::from_utf8_unchecked(&self.bytes[..n]) }
+    }
+
+    /// Get raw C pointer if you pass it to C.
+    #[inline]
+    pub fn as_ptr(&self) -> *const u8 { self.bytes.as_ptr() }
+
+    #[inline]
+    pub fn clear(&mut self) { self.bytes = [0; MAX_NAME + 1]; }
+
+    /// Is it empty ("")?
+    #[inline]
+    pub fn is_empty(&self) -> bool { self.bytes[0] == 0 }
+}
+
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct AcGrp {
     pub grp_init:   bool,
     pub grp_idx:    u8,
     pub grp_type:   u8,
-    pub channels:   [u64; 8],
-    pub irqs:       [u64; 8],
+    pub channels:   [u8; 8],
+    pub irqs:       [u8; 8],
     pub mappings:   [StrippedMapping; 16],
+    pub data_name:  DataNameCStr,
 }
 impl Default for AcGrp {
     fn default() -> Self {
@@ -629,9 +690,10 @@ impl Default for AcGrp {
             grp_init:   false,
             grp_idx:    0,
             grp_type:   0,
-            channels:   [!0u64; 8],
-            irqs:       [!0u64; 8],
+            channels:   [!0u8; 8],
+            irqs:       [!0u8; 8],
             mappings:   [StrippedMapping::default(); 16],
+            data_name:  DataNameCStr::default(),
         }
     }
 }
@@ -841,8 +903,13 @@ pub fn pd_write_symbols(
                                 if e_idx >= 8 {
                                     break;
                                 }
-                                acg_arr.array[acg_idx].channels[e_idx] = *end as u64;
+                                // FIXME: make sure all ends are u8
+                                acg_arr.array[acg_idx].channels[e_idx] = *end as u8;
                             }
+                            // get data path...
+                            acg_arr.array[acg_idx].data_name.set_trunc(a.data_name.as_str());
+
+                            println!("{}", a.data_name.as_str());                            
 
                             // init acg state
                             acg_arr.array[acg_idx].grp_init = true;
