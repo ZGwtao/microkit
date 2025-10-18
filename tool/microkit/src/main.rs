@@ -629,8 +629,8 @@ impl Default for AcGrp {
             grp_init:   false,
             grp_idx:    0,
             grp_type:   0,
-            channels:   [0u64; 8],
-            irqs:       [0u64; 8],
+            channels:   [!0u64; 8],
+            irqs:       [!0u64; 8],
             mappings:   [StrippedMapping::default(); 16],
         }
     }
@@ -836,6 +836,13 @@ pub fn pd_write_symbols(
                                 }
                             }
                             // TODO... (irqs and channels)
+                            for (e_idx, end) in a.ends.iter().enumerate() {
+                                // FIXME: find a better sanity check?
+                                if e_idx >= 8 {
+                                    break;
+                                }
+                                acg_arr.array[acg_idx].channels[e_idx] = *end as u64;
+                            }
 
                             // init acg state
                             acg_arr.array[acg_idx].grp_init = true;

@@ -178,9 +178,11 @@ pub struct ProtectionDomain {
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct AccessRightsDomain {
     pub id: u8,
+    pub data_name: String,
     pub grp_type: u8,
     pub maps: Vec<SysMap>,
     pub setvars: Vec<SysSetVar>,
+    pub ends: Vec<u64>,
 }
 
 #[derive(Debug, PartialEq, Eq, Hash)]
@@ -700,6 +702,7 @@ impl AccessRightsDomain {
 
         // TODO: get acgroup name...
 
+        let mut ends: Vec<u64> = Vec::new();
         let mut maps: Vec<SysMap> = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
     
@@ -734,6 +737,9 @@ impl AccessRightsDomain {
                 }
                 "channel_end" => {
                     // TODO
+                    let end = ChannelEnd::from_xml_acg(xml_sdf, &child)?;
+                    // fetch a channel and enqueue
+                    ends.push(end);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
@@ -745,13 +751,16 @@ impl AccessRightsDomain {
                 }
             }
         }
+        let data_name = checked_lookup(xml_sdf, node, "data_path")?.to_string();
 
         Ok(AccessRightsDomain {
             id,
+            data_name,
             grp_type: acg_type,
             maps,
             //irqs,
             setvars,
+            ends,
         })
     }
 }
@@ -930,6 +939,37 @@ impl SysMemoryRegion {
 }
 
 impl ChannelEnd {
+    fn from_xml_acg<'a>(
+        xml_sdf: &'a XmlSystemDescription,
+        node: &'a roxmltree::Node,
+    ) -> Result<u64, String> {
+        let node_name = node.tag_name().name();
+        // in acgroup, we use a different way of recognising an optional channel end
+        if node_name != "channel_end" {
+            let pos = xml_sdf.doc.text_pos_at(node.range().start);
+            return Err(format!(
+                "Error: invalid XML element '{}': {}",
+                node_name,
+                loc_string(xml_sdf, pos)
+            ));
+        }
+        let end_id = checked_lookup(xml_sdf, node, "id")?.parse::<u64>().unwrap();
+        // TODO
+        // ...
+        // check existency:
+        //  => If this channel end matches with nothing, then abort
+        //
+        //if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
+        Ok(end_id)
+        //} else {
+        //    Err(value_error(
+        //        xml_sdf,
+        //        node,
+        //        format!("invalid PD name '{end_pd}'"),
+        //    ))
+        //}
+    }
+
     fn from_xml<'a>(
         xml_sdf: &'a XmlSystemDescription,
         node: &'a roxmltree::Node,
