@@ -559,18 +559,18 @@ pub struct TrustedLoaderMetadata {
     pub child_id: usize,
     pub system_hash: u64,
     pub public_key: [u8; 32],
-    pub channels: [u64; 62],
+    pub channels: [u8; 62],
+    pub cstate: [u8; 62],
     pub irqs: [u64; 62],
     pub mappings: [MemoryMapping; 62],
     pub init: u8,
-    pub padding: [u8; 4096
-        - (std::mem::size_of::<usize>()
-           + std::mem::size_of::<u64>()
-           + 32
-           + std::mem::size_of::<u64>() * 62   // channels
-           + std::mem::size_of::<u64>() * 62   // irqs
-           + std::mem::size_of::<MemoryMapping>() * 62
-           + std::mem::size_of::<u8>())],                         // init
+    //pub padding: [u8; 4096
+    //    - (std::mem::size_of::<usize>()
+    //       + std::mem::size_of::<u64>()
+    //       + 32 + 62 + 62
+    //       + std::mem::size_of::<u64>() * 62   // irqs
+    //       + std::mem::size_of::<MemoryMapping>() * 62
+    //       + std::mem::size_of::<u8>())],                         // init
 }
 impl Default for TrustedLoaderMetadata {
     fn default() -> Self {
@@ -578,18 +578,18 @@ impl Default for TrustedLoaderMetadata {
             child_id: 0,
             system_hash: 0,
             public_key: [0u8; 32],
-            channels: [0u64; 62],
+            channels: [0u8; 62],
+            cstate: [0u8; 62],
             irqs: [0u64; 62],
             mappings: [MemoryMapping::default(); 62],
             init: 0,
-            padding: [0u8; 4096
-                - (std::mem::size_of::<usize>()
-                + std::mem::size_of::<u64>()
-                + 32
-                + std::mem::size_of::<u64>() * 62
-                + std::mem::size_of::<u64>() * 62
-                + std::mem::size_of::<MemoryMapping>() * 62
-                + std::mem::size_of::<u8>())],
+            //padding: [0u8; 4096
+            //    - (std::mem::size_of::<usize>()
+            //    + std::mem::size_of::<u64>()
+            //    + 32 + 62 + 62
+            //    + std::mem::size_of::<u64>() * 62
+            //    + std::mem::size_of::<MemoryMapping>() * 62
+            //    + std::mem::size_of::<u8>())],
         }
     }
 }
@@ -783,7 +783,8 @@ pub fn pd_write_symbols(
                      * and the parent of the child PD is a template PD...
                      */
                     if parent == pd_idx {
-                        let mut channels_to_remove = [0u64; MAX_CHANNELS];
+                        let mut channels_to_remove = [0u8; MAX_CHANNELS];
+                        let mut channels_state = [0u8; MAX_CHANNELS];
                         let mut irqs_to_remove = [0u64; MAX_CHANNELS];
                         let mut mappings_to_remove = [OptionalMapping::default(); MAX_CHANNELS];
 
@@ -817,12 +818,20 @@ pub fn pd_write_symbols(
                                     pds[curr_idx].name, channel.end_a.id
                                 );
                                 channels_to_remove[channel.end_a.id as usize] = 1;
+                                // if protected procedure call...
+                                if channel.end_a.pp {
+                                    channels_state[channel.end_a.id as usize] = 1;
+                                }
                             } else if channel.end_b.pd == curr_idx {
                                 println!(
                                     "Optional channel for PD '{}' found (id={})",
                                     pds[curr_idx].name, channel.end_b.id
                                 );
                                 channels_to_remove[channel.end_b.id as usize] = 1;
+                                // if protected procedure call...
+                                if channel.end_b.pp {
+                                    channels_state[channel.end_b.id as usize] = 1;
+                                }
                             }
                         }
 
@@ -837,6 +846,7 @@ pub fn pd_write_symbols(
                         assert!(md_array.trusted_loader_md_array[child_idx].child_id == child_idx);
 
                         md_array.trusted_loader_md_array[child_idx].channels.copy_from_slice(&channels_to_remove);
+                        md_array.trusted_loader_md_array[child_idx].cstate.copy_from_slice(&channels_state);
                         md_array.trusted_loader_md_array[child_idx].irqs.copy_from_slice(&irqs_to_remove);
                         md_array.trusted_loader_md_array[child_idx].system_hash = system_hash;
 
