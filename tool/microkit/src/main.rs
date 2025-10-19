@@ -556,40 +556,27 @@ impl Default for StrippedMapping {
 
 #[repr(C)]
 pub struct TrustedLoaderMetadata {
-    pub child_id: usize,
+    pub child_id:   usize,
     pub system_hash: u64,
     pub public_key: [u8; 32],
-    pub channels: [u8; 62],
-    pub cstate: [u8; 62],
-    pub irqs: [u64; 62],
-    pub mappings: [MemoryMapping; 62],
-    pub init: u8,
-    //pub padding: [u8; 4096
-    //    - (std::mem::size_of::<usize>()
-    //       + std::mem::size_of::<u64>()
-    //       + 32 + 62 + 62
-    //       + std::mem::size_of::<u64>() * 62   // irqs
-    //       + std::mem::size_of::<MemoryMapping>() * 62
-    //       + std::mem::size_of::<u8>())],                         // init
+    pub channels:   [u8; 62],
+    pub cstate:     [u8; 62],
+    pub irqs:       [u64; 62],
+    pub mappings:   [MemoryMapping; 62],
+    pub init:       u8,
 }
+
 impl Default for TrustedLoaderMetadata {
     fn default() -> Self {
         TrustedLoaderMetadata {
-            child_id: 0,
+            child_id:   0,
             system_hash: 0,
             public_key: [0u8; 32],
-            channels: [0u8; 62],
-            cstate: [0u8; 62],
-            irqs: [0u64; 62],
-            mappings: [MemoryMapping::default(); 62],
-            init: 0,
-            //padding: [0u8; 4096
-            //    - (std::mem::size_of::<usize>()
-            //    + std::mem::size_of::<u64>()
-            //    + 32 + 62 + 62
-            //    + std::mem::size_of::<u64>() * 62
-            //    + std::mem::size_of::<MemoryMapping>() * 62
-            //    + std::mem::size_of::<u8>())],
+            channels:   [0u8; 62],
+            cstate:     [0u8; 62],
+            irqs:       [0u64; 62],
+            mappings:   [MemoryMapping::default(); 62],
+            init:       0
         }
     }
 }
