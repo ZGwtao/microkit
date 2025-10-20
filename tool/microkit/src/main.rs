@@ -1879,12 +1879,12 @@ fn build_system(
     // not each PD needs this... (only the child of a template PD will need it)
     // these tsldr pages are by default unmapped, but just created to be late-mapped...
     for pd in &system.protection_domains {
-        let (page_size_human, page_size_label) = util::human_size_strict(PageSize::Large as u64);
+        let (page_size_human, page_size_label) = util::human_size_strict(PageSize::Small as u64);
         let tsldr_context_str = format!(
             "Page({} {}): tsldr context PD={}",
             page_size_human, page_size_label, pd.name
         );
-        large_page_names.push(tsldr_context_str);
+        small_page_names.push(tsldr_context_str);
     }
 
     for mr in &all_mrs {
@@ -1913,12 +1913,12 @@ fn build_system(
     // All the IPC buffers are the first to be allocated which is why this works
     let ipc_buffer_objs = &small_page_objs[..system.protection_domains.len()];
     /* 'template-PD': the objects of the trusted loader context */
-    let tsldr_context_objs = &large_page_objs[..system.protection_domains.len()];
+    let tsldr_context_objs = &small_page_objs[system.protection_domains.len()..2 * system.protection_domains.len()];
 
     let mut mr_pages: HashMap<&SysMemoryRegion, Vec<Object>> = HashMap::new();
 
-    let mut page_small_idx = ipc_buffer_objs.len();
-    let mut page_large_idx = tsldr_context_objs.len();
+    let mut page_small_idx = ipc_buffer_objs.len() + tsldr_context_objs.len();
+    let mut page_large_idx = 0;
 
     for mr in &all_mrs {
         if mr.phys_addr.is_some() {
