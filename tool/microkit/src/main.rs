@@ -84,7 +84,6 @@ const BACKGROUND_CNODE_NOTIFICATION_CAP: u64 = 10;
 const BACKGROUND_CNODE_IRQ_CAP: u64 = BACKGROUND_CNODE_NOTIFICATION_CAP + 64;
 const BACKGROUND_CNODE_PPC_CAP: u64 = BACKGROUND_CNODE_IRQ_CAP + 64;
 const BACKGROUND_CNODE_MAPPING_CAP: u64 = BACKGROUND_CNODE_PPC_CAP + 64;
-const BACKGROUND_CNODE_TSLDR_CONTEXT_CAP: u64 = 500;
 
 const MAX_SYSTEM_INVOCATION_SIZE: u64 = util::mb(128);
 
@@ -1875,17 +1874,6 @@ fn build_system(
         );
         small_page_names.push(ipc_buffer_str);
     }
-    /* 'template-PD': we need a trusted loader context page to pass trust loading info */
-    // not each PD needs this... (only the child of a template PD will need it)
-    // these tsldr pages are by default unmapped, but just created to be late-mapped...
-    for pd in &system.protection_domains {
-        let (page_size_human, page_size_label) = util::human_size_strict(PageSize::Small as u64);
-        let tsldr_context_str = format!(
-            "Page({} {}): tsldr context PD={}",
-            page_size_human, page_size_label, pd.name
-        );
-        small_page_names.push(tsldr_context_str);
-    }
 
     for mr in &all_mrs {
         if mr.phys_addr.is_some() {
@@ -1913,11 +1901,10 @@ fn build_system(
     // All the IPC buffers are the first to be allocated which is why this works
     let ipc_buffer_objs = &small_page_objs[..system.protection_domains.len()];
     /* 'template-PD': the objects of the trusted loader context */
-    let tsldr_context_objs = &small_page_objs[system.protection_domains.len()..2 * system.protection_domains.len()];
 
     let mut mr_pages: HashMap<&SysMemoryRegion, Vec<Object>> = HashMap::new();
 
-    let mut page_small_idx = ipc_buffer_objs.len() + tsldr_context_objs.len();
+    let mut page_small_idx = ipc_buffer_objs.len();
     let mut page_large_idx = 0;
 
     for mr in &all_mrs {
@@ -2107,7 +2094,6 @@ fn build_system(
                 /* ipc symbol should be the only valid mapping in the vspace */
                 vaddrs.push((SYMBOL_IPC_BUFFER_DELAY, PageSize::Small));
                 /* trusted loader context as well... */
-                //vaddrs.push((SYMBOL_TRUSTED_LOADER_CONTEXT, PageSize::Large));
                 assert!(
                     pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER).is_err(),
                     "IPC_BUFFER symbol should not exist"
@@ -2119,15 +2105,6 @@ fn build_system(
             // println!("pd={} ipc_buffer_vaddr=0x{:x}", pd.name, ipc_buffer_vaddr);
             vaddrs.push((ipc_buffer_vaddr, PageSize::Small));
         }
-
-        //if let Ok((ipc_buffer_vaddr, _)) = pd_elf_files[pd_idx].find_symbol(SYMBOL_IPC_BUFFER) {
-        //    // println!("pd={} ipc_buffer_vaddr=0x{:x}", pd.name, ipc_buffer_vaddr);
-        //    vaddrs.push((ipc_buffer_vaddr, PageSize::Small));
-        //} else {
-        //    // println!("pd={} no ipc_buffer_vaddr", pd.name);
-        //    vaddrs.push((SYMBOL_IPC_BUFFER_DELAY, PageSize::Small));
-        //    vaddrs.push((SYMBOL_TRUSTED_LOADER_CONTEXT, PageSize::Large));
-        //}
 
         let mut upper_directory_vaddrs = HashSet::new();
         let mut directory_vaddrs = HashSet::new();
@@ -3335,33 +3312,6 @@ fn build_system(
             ));
         }
     }
-
-    // map the trusted loader context & keep the cap
-    for (pd_idx, pd) in system.protection_domains.iter().enumerate() {
-        if let Some(parent_idx) = pd.parent {
-            /* check if the parent is PD template  */
-            if system.protection_domains[parent_idx].is_template {
-                let tsldr_context_obj = tsldr_context_objs[pd_idx];
-                /* back up in template's background CNode */
-                let bgnode_obj = &bgnode_objs[pd_idx];
-                system_invocations.push(Invocation::new(
-                    config,
-                    InvocationArgs::CnodeMint {
-                        cnode: bgnode_obj.cap_addr,
-                        dest_index: BACKGROUND_CNODE_TSLDR_CONTEXT_CAP,
-                        dest_depth: PD_CAP_BITS,
-                        src_root: root_cnode_cap,
-                        src_obj: tsldr_context_obj.cap_addr,
-                        src_depth: config.cap_address_bits,
-                        rights: Rights::All as u64,
-                        badge: 0,
-                    },
-                ));
-                /* -- don't map to child's address space ... -- */
-            }
-        }
-    }
-
     // Initialise the TCBs
 
     // Set the scheduling parameters
