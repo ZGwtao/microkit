@@ -560,7 +560,10 @@ fn main() -> Result<(), String> {
         "Microkit tool has various assumptions about the word size being 64-bits."
     );
 
-    let mut system = match parse(args.system, &xml, &kernel_config) {
+// Parse the sdf here (i.e., the XML file)
+// We should change the parse function to take dynamic features from the XML
+// and return the information of dynamic features to the SystemDescription variable
+    let mut system: microkit_tool::sdf::SystemDescription = match parse(args.system, &xml, &kernel_config) {
         Ok(system) => system,
         Err(err) => {
             eprintln!("{err}");
@@ -604,17 +607,23 @@ fn main() -> Result<(), String> {
     // This list refers to all PD ELFs as well as the Monitor ELF.
     // The monitor is very similar to a PD so it is useful to pass around
     // a list like this.
+// FIXME
+// Be careful to the elf index, because there are template PD who does not have elf
     let mut system_elfs = Vec::with_capacity(system.protection_domains.len());
     // Get the elf files for each pd:
     for pd in &system.protection_domains {
-        match get_full_path(&pd.program_image, &search_paths) {
+        let Some(program_image) = &pd.program_image else {
+            system_elfs.push(ElfFile::default());
+            continue;
+        };
+        match get_full_path(&program_image, &search_paths) {
             Some(path) => {
                 system_elfs.push(ElfFile::from_path(&path)?);
             }
             None => {
                 return Err(format!(
                     "unable to find program image: '{}'",
-                    pd.program_image.display()
+                    program_image.display()
                 ))
             }
         }
@@ -639,6 +648,7 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
 
+// Should we set capability distribution in here?
         let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
         pack_spec_into_initial_task(
             &kernel_config,

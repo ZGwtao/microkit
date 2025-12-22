@@ -94,6 +94,7 @@ pub struct SysMap {
     /// Location in the parsed SDF file. Because this struct is
     /// used in a non-XML context, we make the position optional.
     pub text_pos: Option<roxmltree::TextPos>,
+    pub optional: bool,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
@@ -202,7 +203,7 @@ pub struct IOPort {
     pub text_pos: roxmltree::TextPos,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum SysSetVarKind {
     // For size we do not store the size since when we parse mappings
     // we do not have access to the memory region yet. The size is resolved
@@ -214,7 +215,7 @@ pub enum SysSetVarKind {
     X86IoPortAddr { address: u64 },
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SysSetVar {
     pub symbol: String,
     pub kind: SysSetVarKind,
@@ -233,6 +234,7 @@ pub struct ChannelEnd {
 pub struct Channel {
     pub end_a: ChannelEnd,
     pub end_b: ChannelEnd,
+    pub optional: bool,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -256,7 +258,7 @@ pub struct ProtectionDomain {
     pub stack_size: u64,
     pub smc: bool,
     pub cpu: CpuCore,
-    pub program_image: PathBuf,
+    pub program_image: Option<PathBuf>,
     pub maps: Vec<SysMap>,
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
@@ -266,6 +268,8 @@ pub struct ProtectionDomain {
     /// once we flatten each PD and its children into one list.
     pub child_pds: Vec<ProtectionDomain>,
     pub has_children: bool,
+    /// DYN: template PD attribute
+    pub is_template: bool,
     /// Index into the total list of protection domains if a parent
     /// protection domain exists
     pub parent: Option<usize>,
@@ -273,7 +277,20 @@ pub struct ProtectionDomain {
     pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
     text_pos: Option<roxmltree::TextPos>,
+    /// Access rights groups
+    pub acgrps: Vec<AccessRightsDomain>,
 }
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct AccessRightsDomain {
+    pub id: u8,
+    pub data_name: String,
+    pub grp_type: u8,
+    pub maps: Vec<SysMap>,
+    pub setvars: Vec<SysSetVar>,
+    pub ends: Vec<u64>,
+}
+
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct VirtualMachine {
@@ -341,8 +358,9 @@ impl SysMap {
         node: &roxmltree::Node,
         allow_setvar: bool,
         max_vaddr: u64,
+        optional: bool,
     ) -> Result<SysMap, String> {
-        let mut attrs = vec!["mr", "vaddr", "perms", "cached"];
+        let mut attrs = vec!["mr", "vaddr", "perms", "cached", "optional"];
         if allow_setvar {
             attrs.push("setvar_vaddr");
             attrs.push("setvar_size");
@@ -401,12 +419,31 @@ impl SysMap {
             true
         };
 
+        let mut optional = optional; // start with the parameter
+        if !optional {
+            optional = if let Some(xml_optional) = node.attribute("optional") {
+                match str_to_bool(xml_optional) {
+                    Some(val) => val,
+                    None => {
+                        return Err(value_error(
+                            xml_sdf,
+                            node,
+                            "optional must be 'true' or 'false'".to_string(),
+                        ))
+                    }
+                }
+            } else {
+                false // Default to required
+            };
+        }
+
         Ok(SysMap {
             mr,
             vaddr,
             perms,
             cached,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            optional,
         })
     }
 }
@@ -444,6 +481,7 @@ impl ProtectionDomain {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         is_child: bool,
+        is_template: bool,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
             "name",
@@ -588,6 +626,7 @@ impl ProtectionDomain {
         let mut ioports = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
+        let mut acgrps = Vec::new();
 
         let mut program_image = None;
         let mut virtual_machine = None;
@@ -628,7 +667,7 @@ impl ProtectionDomain {
                 }
                 "map" => {
                     let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
-                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr)?;
+                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr, false)?;
 
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
                         let setvar = SysSetVar {
@@ -998,7 +1037,7 @@ impl ProtectionDomain {
                     checked_add_setvar(&mut setvars, setvar, xml_sdf, &child)?;
                 }
                 "protection_domain" => {
-                    let child_pd = ProtectionDomain::from_xml(config, xml_sdf, &child, true)?;
+                    let child_pd = ProtectionDomain::from_xml(config, xml_sdf, &child, true, false)?;
 
                     if let Some(setvar_id) = &child_pd.setvar_id {
                         let setvar = SysSetVar {
@@ -1042,6 +1081,17 @@ impl ProtectionDomain {
 
                     virtual_machine = Some(vm);
                 }
+                "acgroup" => {
+                    let accrss_group = AccessRightsDomain::from_xml(config, xml_sdf, &child, stack_size)?;
+
+                    println!("length old = {}", maps.len());
+                    // push all elements scanned from acgroup to parent PD...
+                    maps.extend(accrss_group.maps.iter().cloned());
+                    setvars.extend(accrss_group.setvars.iter().cloned());
+
+                    println!("length new = {}", maps.len());
+                    acgrps.push(accrss_group);
+                }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
@@ -1053,9 +1103,9 @@ impl ProtectionDomain {
             }
         }
 
-        if program_image.is_none() {
+        if program_image.is_none() && !is_child {
             return Err(format!(
-                "Error: missing 'program_image' element on protection_domain: '{name}'"
+                "Error: missing 'program_image' element on protection_domain: '{name}'; all root PDs must have a program image"
             ));
         }
 
@@ -1073,7 +1123,7 @@ impl ProtectionDomain {
             stack_size,
             smc,
             cpu,
-            program_image: program_image.unwrap(),
+            program_image: Some(program_image.unwrap()),
             maps,
             irqs,
             ioports,
@@ -1081,12 +1131,101 @@ impl ProtectionDomain {
             child_pds,
             virtual_machine,
             has_children,
+            is_template,
             parent: None,
             setvar_id,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
+            acgrps,
         })
     }
 }
+
+impl AccessRightsDomain {
+    fn from_xml(
+        config: &Config,
+        xml_sdf: &XmlSystemDescription,
+        node: &roxmltree::Node,
+        stack_size: u64,
+    ) -> Result<AccessRightsDomain, String> {
+        // get group id from XML file
+        let id = if let Some(acrs_id) = node.attribute("gid") {
+            sdf_parse_number(acrs_id, node)? as u8
+        } else {
+            0
+        };
+
+        // get acgroup type (like FS/serial/network...)
+        let acg_type = if let Some(grp_type) = node.attribute("grp_type") {
+            sdf_parse_number(grp_type, node)? as u8
+        } else {
+            8
+        };
+
+        // TODO: get acgroup name...
+
+        let mut ends: Vec<u64> = Vec::new();
+        let mut maps: Vec<SysMap> = Vec::new();
+        let mut setvars: Vec<SysSetVar> = Vec::new();
+
+        for child in node.children() {
+            if !child.is_element() {
+                continue;
+            }
+            match child.tag_name().name() {
+                "map" => {
+                    let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
+                    let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr, true)?;
+                    // all mappings from access right domains are optional
+                    // map.optional = true;
+                    if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
+                        // Check that the symbol does not already exist
+                        for setvar in &setvars {
+                            if setvar_vaddr == setvar.symbol {
+                                return Err(value_error(
+                                    xml_sdf,
+                                    &child,
+                                    format!("setvar on symbol '{}' already exists", setvar_vaddr),
+                                ));
+                            }
+                        }
+
+                        setvars.push(SysSetVar {
+                            symbol: setvar_vaddr.to_string(),
+                            kind: SysSetVarKind::Vaddr { address: map.vaddr },
+                        });
+                    }
+                    maps.push(map);
+                }
+                "channel_end" => {
+                    // TODO
+                    let end = ChannelEnd::from_xml_acg(xml_sdf, &child)?;
+                    // fetch a channel and enqueue
+                    ends.push(end);
+                }
+                _ => {
+                    let pos = xml_sdf.doc.text_pos_at(child.range().start);
+                    return Err(format!(
+                        "Invalid XML element '{}' for access rights group: {}",
+                        child.tag_name().name(),
+                        loc_string(xml_sdf, pos)
+                    ));
+                }
+            }
+        }
+        let data_name = checked_lookup(xml_sdf, node, "data_path")?.to_string();
+
+        Ok(AccessRightsDomain {
+            id,
+            data_name,
+            grp_type: acg_type,
+            maps,
+            //irqs,
+            setvars,
+            ends,
+        })
+    }
+}
+
 
 impl VirtualMachine {
     fn from_xml(
@@ -1181,7 +1320,7 @@ impl VirtualMachine {
                 "map" => {
                     // Virtual machines do not have program images and so we do not allow
                     // setvar_vaddr on SysMap
-                    let map = SysMap::from_xml(xml_sdf, &child, false, config.vm_map_max_vaddr())?;
+                    let map = SysMap::from_xml(xml_sdf, &child, false, config.vm_map_max_vaddr(), false)?;
                     maps.push(map);
                 }
                 _ => {
@@ -1283,6 +1422,37 @@ impl SysMemoryRegion {
 }
 
 impl ChannelEnd {
+    fn from_xml_acg<'a>(
+        xml_sdf: &'a XmlSystemDescription,
+        node: &'a roxmltree::Node,
+    ) -> Result<u64, String> {
+        let node_name = node.tag_name().name();
+        // in acgroup, we use a different way of recognising an optional channel end
+        if node_name != "channel_end" {
+            let pos = xml_sdf.doc.text_pos_at(node.range().start);
+            return Err(format!(
+                "Error: invalid XML element '{}': {}",
+                node_name,
+                loc_string(xml_sdf, pos)
+            ));
+        }
+        let end_id = checked_lookup(xml_sdf, node, "id")?.parse::<u64>().unwrap();
+        // TODO
+        // ...
+        // check existency:
+        //  => If this channel end matches with nothing, then abort
+        //
+        //if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
+        Ok(end_id)
+        //} else {
+        //    Err(value_error(
+        //        xml_sdf,
+        //        node,
+        //        format!("invalid PD name '{end_pd}'"),
+        //    ))
+        //}
+    }
+
     fn from_xml<'a>(
         xml_sdf: &'a XmlSystemDescription,
         node: &'a roxmltree::Node,
@@ -1362,7 +1532,7 @@ impl Channel {
         node: &'a roxmltree::Node,
         pds: &[ProtectionDomain],
     ) -> Result<Channel, String> {
-        check_attributes(xml_sdf, node, &[])?;
+        check_attributes(xml_sdf, node, &["optional"])?;
 
         let [ref end_a, ref end_b] = node
             .children()
@@ -1377,6 +1547,18 @@ impl Channel {
             ));
         };
 
+        let optional = node
+            .attribute("optional")
+            .map(str_to_bool)
+            .unwrap_or(Some(false))
+            .ok_or_else(|| {
+                value_error(
+                    xml_sdf,
+                    node,
+                    "optional must be 'true' or 'false'".to_string(),
+                )
+            })?;
+
         if end_a.pp && end_b.pp {
             return Err(value_error(
                 xml_sdf,
@@ -1388,6 +1570,7 @@ impl Channel {
         Ok(Channel {
             end_a: end_a.clone(),
             end_b: end_b.clone(),
+            optional,
         })
     }
 }
@@ -1652,9 +1835,12 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
 
         let child_name = child.tag_name().name();
         match child_name {
-            "protection_domain" => {
-                root_pds.push(ProtectionDomain::from_xml(config, &xml_sdf, &child, false)?)
-            }
+            "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
+                config, &xml_sdf, &child, false, false,
+            )?),
+            "template" => root_pds.push(ProtectionDomain::from_xml(
+                config, &xml_sdf, &child, false, true,
+            )?),
             "channel" => channel_nodes.push(child),
             "memory_region" => mrs.push(SysMemoryRegion::from_xml(config, &xml_sdf, &child)?),
             "virtual_machine" => {

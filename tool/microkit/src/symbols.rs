@@ -89,8 +89,13 @@ pub fn patch_symbols(
     for mr in system.memory_regions.iter() {
         mr_name_to_desc.insert(&mr.name, mr);
     }
-
+// Determine if the PD is template PD in the loop...
     for (pd_global_idx, pd) in system.protection_domains.iter().enumerate() {
+        // Not all PD has a given program image if dynamic feature is ON
+        let Some(program_image) = &pd.program_image else {
+            continue;
+        };
+
         let elf_obj = &mut pd_elf_files[pd_global_idx];
 
         let name = pd.name.as_bytes();
@@ -166,7 +171,7 @@ pub fn patch_symbols(
                         "could not patch symbol '{}' in program image for PD '{}' ({}): {}",
                         setvar.symbol,
                         pd.name,
-                        pd.program_image.display(),
+                        program_image.display(),
                         err
                     ))
                 }
