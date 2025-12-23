@@ -1123,7 +1123,7 @@ impl ProtectionDomain {
             stack_size,
             smc,
             cpu,
-            program_image: Some(program_image.unwrap()),
+            program_image,
             maps,
             irqs,
             ioports,
