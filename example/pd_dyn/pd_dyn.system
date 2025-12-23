@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+ Copyright 2025, UNSW
+
+ SPDX-License-Identifier: BSD-2-Clause
+-->
+<system>
+    <!-- protection_domain name="pd_tem" priority="100" -->
+    <template name="pd_tem" priority="100">
+        <program_image path="template.elf" />
+        <ioport id="0" addr="0x3f8" size="8" setvar_id="com1_ioport_id" setvar_addr="com1_ioport_addr"/>
+        <protection_domain name="pd_dyn" priority="253" id="15">
+        </protection_domain>
+    </template>
+    <!-- /protection_domain -->
+</system>
