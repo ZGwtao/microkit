@@ -343,14 +343,13 @@ impl CapDLSpecContainer {
         };
 
         let tcb_name = format!("tcb_{pd_name}");
-        let entry_point: u64;
+
+        // Fault all dynamic PD on 0x0 at initialisation phase
+        let mut entry_point = 0x0;
         if is_dyn == false {
+            // For non-dynamic PD, allow them to work with valid elf entry
             entry_point = elf.entry;
-        } else {
-            // FIXME
-            entry_point = 0x0;
         }
-        //let entry_point = elf.entry;
 
         let tcb_extra_info = object::TcbExtraInfo {
             ipc_buffer_addr: ipcbuf_vaddr.into(),
