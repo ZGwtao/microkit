@@ -5,12 +5,33 @@
  SPDX-License-Identifier: BSD-2-Clause
 -->
 <system>
-    <!-- protection_domain name="pd_tem" priority="100" -->
+    <memory_region name="mr_trusted_loader" size="0x800_000" page_size="0x200_000" />
+    <memory_region name="mr_trampoline"     size="0x800_000" page_size="0x200_000" />
+    <memory_region name="mr_client_payload" size="0x800_000" page_size="0x200_000" />
+
+    <memory_region name="mr_working_stack"      size="0x1000" page_size="0x1000" />
+    <memory_region name="mr_trampoline_stack"   size="0x1000" page_size="0x1000" />
+    <memory_region name="mr_trampoline_exec"    size="0x800_000" page_size="0x200_000" />
+    <memory_region name="mr_client_exec"        size="0x800_000" page_size="0x200_000" />
+
     <template name="pd_tem" priority="100">
         <program_image path="template.elf" />
         <ioport id="0" addr="0x3f8" size="8" setvar_id="com1_ioport_id" setvar_addr="com1_ioport_addr"/>
+
+        <map mr="mr_client_payload" vaddr="0x50000000" perms="rw" cached="true" />
+        <map mr="mr_trampoline"     vaddr="0x30000000" perms="rw" cached="true" />
+        <map mr="mr_trusted_loader" vaddr="0x10000000" perms="rw" cached="true" />
+        
         <protection_domain name="pd_dyn" priority="253" id="15">
+            <map mr="mr_client_payload"  vaddr="0x2000000" perms="rw" cached="true" />
+            <map mr="mr_trampoline"      vaddr="0x1000000" perms="rw" cached="true" />
+            <map mr="mr_trampoline_exec" vaddr="0x1800000" perms="rw" cached="true" />
+            <map mr="mr_trusted_loader"  vaddr="0x0200000" perms="rw" cached="true" />
+
+            <map mr="mr_client_exec"      vaddr="0x2800000" perms="rw" cached="true" />
+            <map mr="mr_trampoline_stack" vaddr="0x00FFFDFF000" perms="rw" cached="true" />
+            <map mr="mr_working_stack"    vaddr="0x00FFFBFF000" perms="rw" cached="true" />
+
         </protection_domain>
     </template>
-    <!-- /protection_domain -->
 </system>

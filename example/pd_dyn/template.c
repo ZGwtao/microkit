@@ -6,9 +6,27 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <microkit.h>
+#include <elfutils.h>
 
 uint64_t com1_ioport_id;
 uint64_t com1_ioport_addr;
+
+// Shared memory regions with the dynamic PD...
+uint64_t image_client_payload   = 0x50000000;
+uint64_t image_trampoline       = 0x30000000;
+uint64_t image_trusted_loader   = 0x10000000;
+
+// Where to get the image of trusted loader
+extern char _loader[];
+extern char _loader_end[];
+// Also, for the client payload (image)...
+extern char _payload[];
+extern char _payload_end[];
+// and the trampoline image...
+extern char _trampoline[];
+extern char _trampoline_end[];
+
+void microkit_dbg_printf(const char *format, ...);
 
 static inline void serial_putc(char ch)
 {
@@ -28,21 +46,20 @@ static inline void serial_puts(const char *s)
 
 void init(void)
 {
-    microkit_dbg_puts("hello, world. my name is ");
+    //microkit_dbg_puts("hello, world. my name is ");
     microkit_dbg_puts(microkit_name);
     microkit_dbg_puts("\n");
 
     microkit_dbg_puts("Now writing to serial I/O port: ");
     serial_puts("hello!\n");
+
+    // test capDL spec generation and capability distribution...
+    seL4_Signal(410);
 }
 
 void notified(microkit_channel ch)
 {
 }
-
-
-void microkit_dbg_printf(const char *format, ...);
-
 
 seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo *reply_msginfo)
 {
@@ -57,8 +74,22 @@ seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo
         microkit_dbg_printf("seL4_Fault_VMFault\n");
         microkit_dbg_printf("Fault address: %x\n", (unsigned long long)address);
         microkit_dbg_printf("Fault instruction pointer: %x\n", (unsigned long long)ip);
-    }
+        // You can use microkit_pd_restart to restart the child PD...
+        if (ip == 0x0) {
+            microkit_pd_stop(child);
+            microkit_dbg_printf("Restart faulting PD at the entry of trusted loaders...\n");
 
+            Elf64_Ehdr *ehdr = (Elf64_Ehdr *)_loader;
+            if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
+                microkit_dbg_printf("Data in shared memory region must be an ELF file\n");
+                return seL4_False;
+            }
+            load_elf((void*)image_trusted_loader, ehdr);
+            // FIXME: do sanity checks when the dynamic PD faults on 0x0
+            microkit_pd_restart(child, ehdr->e_entry);
+            return seL4_False;
+        }
+    }
     microkit_pd_stop(child);
 
     // Stop the thread explicitly; no need to reply to the fault

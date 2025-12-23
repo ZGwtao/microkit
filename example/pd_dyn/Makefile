@@ -33,12 +33,18 @@ endif
 CC := $(TOOLCHAIN)-gcc
 LD := $(TOOLCHAIN)-ld
 AS := $(TOOLCHAIN)-as
+AR := $(TOOLCHAIN)-ar
 OBJCOPY := $(TOOLCHAIN)-objcopy
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
-IMAGES := template.elf
-CFLAGS := -nostdlib -ffreestanding -g3 -O3 -I$(BOARD_DIR)/include $(CFLAGS_ARCH)
-LDFLAGS := -L$(BOARD_DIR)/lib -z noexecstack
+LIBEXTELF_SRC_DIR := $(CURDIR)/extelf
+include $(LIBEXTELF_SRC_DIR)/Makefile
+
+IMAGES := template.elf x86_64_ioport.elf
+CFLAGS := -nostdlib -ffreestanding -g3 -O3 \
+			-I$(BOARD_DIR)/include $(CFLAGS_ARCH) \
+			-I$(LIBEXTELF_SRC_DIR)/include
+LDFLAGS := -L$(BOARD_DIR)/lib -z noexecstack -L$(LIBEXTELF_BUILD_DIR)
 LIBS := -lmicrokit -Tmicrokit.ld
 
 INITIAL_TASK = $(BUILD_DIR)/initialiser.elf
@@ -47,14 +53,27 @@ KERNEL_32B = $(BUILD_DIR)/sel4_32.elf
 REPORT = $(BUILD_DIR)/report.txt
 SPEC = $(BUILD_DIR)/capdl_spec.json
 
+PACKAGE_OBJS := $(BUILD_DIR)/package.o
+
 all: $(KERNEL) $(INITIAL_TASK)
 qemu: $(KERNEL_32B) $(INITIAL_TASK)
 
 $(BUILD_DIR)/template.o: template.c Makefile
 	$(CC) -c $(CFLAGS) -Wall -Wno-unused-function -Werror $< -o $@
 
-$(BUILD_DIR)/template.elf: $(BUILD_DIR)/template.o
+$(BUILD_DIR)/template.elf: $(BUILD_DIR)/template.o $(PACKAGE_OBJS) ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
+
+$(BUILD_DIR)/x86_64_ioport.o: x86_64_ioport.c Makefile
+	$(CC) -c $(CFLAGS) -Wall -Wno-unused-function -Werror $< -o $@
+
+$(BUILD_DIR)/x86_64_ioport.elf: $(BUILD_DIR)/x86_64_ioport.o
+	$(LD) $(LDFLAGS) --defsym __sel4_ipc_buffer=0x100000 $^ $(LIBS) -o $@
+
+$(PACKAGE_OBJS): package.S $(BUILD_DIR)/x86_64_ioport.elf
+	$(CC) -c -g3 -x assembler-with-cpp \
+		-DLOADER_PATH=\"$(BUILD_DIR)/x86_64_ioport.elf\" \
+		package.S -o $@
 
 $(KERNEL) $(KERNEL_32B) $(INITIAL_TASK): $(addprefix $(BUILD_DIR)/, $(IMAGES)) pd_dyn.system
 	$(MICROKIT_TOOL) pd_dyn.system --search-path $(BUILD_DIR) --board $(MICROKIT_BOARD) --config $(MICROKIT_CONFIG) -o $(INITIAL_TASK) -r $(REPORT) --capdl-json $(SPEC)
