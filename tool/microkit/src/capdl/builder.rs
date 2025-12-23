@@ -96,6 +96,25 @@ const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
 const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
 
+// Valid only if the PD is template PD
+// Maximum 16 dynamic PD (child) per template PD (parent)
+// (working) CNode cap for the child PD
+const PD_BASE_PD_CND_CAP: u64 = PD_BASE_IOPORT_CAP + 16;
+// Background CNode cap for the child PD
+const PD_BASE_PD_BGD_CAP: u64 = PD_BASE_PD_CND_CAP + 16;
+// (working) VSpace cap for the child PD
+const PD_BASE_PD_VSP_CAP: u64 = PD_BASE_PD_BGD_CAP + 16;
+
+// Where to find the working CNode from the background CNode
+const BGD_CSPACE_CAP_IDX: u64 = 8;
+// Where to find the working VSpace from the background CNode
+const BGD_VSPACE_CAP_IDX: u64 = 9;
+// Where the optional capability lives ... 
+const BGD_CNODE_NOTIFICATION_CAP: u64 = 10;
+const BGD_CNODE_IRQ_CAP: u64 = BGD_CNODE_NOTIFICATION_CAP + 64;
+const BGD_CNODE_PPC_CAP: u64 = BGD_CNODE_IRQ_CAP + 64;
+const BGD_CNODE_MAPPING_CAP: u64 = BGD_CNODE_PPC_CAP + 64;
+
 pub const PD_CAP_SIZE: u32 = 512;
 const PD_CAP_BITS: u8 = PD_CAP_SIZE.ilog2() as u8;
 const PD_SCHEDCONTEXT_EXTRA_SIZE: u64 = 256;
@@ -183,6 +202,7 @@ impl CapDLSpecContainer {
         pd_cpu: CpuCore,
         elf_id: usize,
         elf: &ElfFile,
+        is_dyn: bool,
     ) -> Result<ObjectId, String> {
         // We assumes that ELFs and PDs have a one-to-one relationship. So for each ELF we create a VSpace.
         let vspace_obj_id = create_vspace(self, sel4_config, pd_name);
@@ -292,10 +312,19 @@ impl CapDLSpecContainer {
         // We need to clone the IPC buf cap because in addition to mapping the frame into the VSpace, we need to bind
         // this frame to the TCB as well.
         let ipcbuf_frame_cap_for_tcb = ipcbuf_frame_cap.clone();
-        let ipcbuf_vaddr = elf
-            .find_symbol(SYMBOL_IPC_BUFFER)
-            .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"))
-            .0;
+        //let ipcbuf_vaddr = elf
+        //    .find_symbol(SYMBOL_IPC_BUFFER)
+        //    .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"))
+        //    .0;
+        let ipcbuf_vaddr: u64;
+        if is_dyn == true {
+            ipcbuf_vaddr = 0x100_000;
+        } else {
+            ipcbuf_vaddr = elf
+                .find_symbol(SYMBOL_IPC_BUFFER)
+                .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"))
+                .0;
+        }
         match map_page(
             self,
             sel4_config,
@@ -314,7 +343,14 @@ impl CapDLSpecContainer {
         };
 
         let tcb_name = format!("tcb_{pd_name}");
-        let entry_point = elf.entry;
+        let entry_point: u64;
+        if is_dyn == false {
+            entry_point = elf.entry;
+        } else {
+            // FIXME
+            entry_point = 0x0;
+        }
+        //let entry_point = elf.entry;
 
         let tcb_extra_info = object::TcbExtraInfo {
             ipc_buffer_addr: ipcbuf_vaddr.into(),
@@ -405,6 +441,7 @@ pub fn build_capdl_spec(
                 CpuCore(0),
                 mon_elf_id,
                 monitor_elf,
+                false
             )
             .unwrap()
     };
@@ -556,11 +593,23 @@ pub fn build_capdl_spec(
         let elf_obj = &elfs[pd_global_idx];
 
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
+    // NOTE
+    // this vector describes the slot of working CNode for each PD
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
+    // this vector describes the slot of background CNode for each PD
+        let mut caps_to_insert_to_pd_bgd: Vec<CapTableEntry> = Vec::new();
+
+        let mut is_dyn = false;
+        if let Some(parent_idx) = pd.parent {
+            let parent = &system.protection_domains[parent_idx];
+            if parent.is_template {
+                is_dyn = true;
+            }
+        }
 
         // Step 3-1: Create TCB and VSpace with all ELF loadable frames mapped in.
         let pd_tcb_obj_id = spec_container
-            .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, pd_global_idx, elf_obj)
+            .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, pd_global_idx, elf_obj, is_dyn)
             .unwrap();
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec_container, pd_tcb_obj_id);
 
@@ -578,6 +627,14 @@ pub fn build_capdl_spec(
             PD_VSPACE_CAP_IDX as u32,
             capdl_util_make_page_table_cap(pd_vspace_obj_id),
         ));
+
+        if is_dyn == true {
+            // Allow background CNode to access the VSpace
+            caps_to_insert_to_pd_bgd.push(capdl_util_make_cte(
+                BGD_VSPACE_CAP_IDX as u32,
+                capdl_util_make_page_table_cap(pd_vspace_obj_id),
+            ));
+        }
 
         // Step 3-2: Map in all Memory Regions
         for map in pd.maps.iter() {
@@ -955,6 +1012,9 @@ pub fn build_capdl_spec(
         }
 
         // Step 3-13 Create CSpace and add all caps that the PD code and libmicrokit need to access.
+
+    // This is where we create the working CNode for each PD
+    // The working CNode contains only what a PD should access for working
         let pd_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
             &pd.name,
@@ -963,10 +1023,63 @@ pub fn build_capdl_spec(
         );
         let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
         let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
+    // I think this CNode cap actually lives in the CapDL initialiser?
         caps_to_bind_to_tcb.push(capdl_util_make_cte(
             TcbBoundSlot::CSpace as u32,
-            pd_cnode_cap,
+            pd_cnode_cap.clone(),
         ));
+
+        if let Some(parent_idx) = pd.parent {
+            let parent = &system.protection_domains[parent_idx];
+            if parent.is_template {
+                // Allow background CNode of the dynamic PD to access the VSpace of the same dynamic PD
+                caps_to_insert_to_pd_bgd.push(capdl_util_make_cte(
+                    BGD_CSPACE_CAP_IDX as u32,
+                    capdl_util_make_page_table_cap(pd_cnode_obj_id),
+                ));
+
+                // Allow the parent PD to access the working CNode of the dynamic PD
+                let parent_cnode_id = *pd_id_to_cspace_id.get(&parent_idx).unwrap();
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container, 
+                    parent_cnode_id,
+                    (PD_BASE_PD_CND_CAP) as u32,
+                    pd_cnode_cap
+                );
+            }
+        }
+
+        let bgd_cnode_obj_id = capdl_util_make_cnode_obj(
+            &mut spec_container,
+            &(pd.name.clone() + "bgd"),
+            PD_CAP_BITS,
+            caps_to_insert_to_pd_bgd
+        );
+        let bgd_cnode_cap = capdl_util_make_cnode_cap(bgd_cnode_obj_id, 0, pd_guard_size as u8);
+        if let Some(parent_idx) = pd.parent {
+            let parent = &system.protection_domains[parent_idx];
+            if parent.is_template {
+                // Allow the parent PD to access the working CNode of the dynamic PD
+                let parent_cnode_id = *pd_id_to_cspace_id.get(&parent_idx).unwrap();
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container, 
+                    parent_cnode_id,
+                    (PD_BASE_PD_BGD_CAP) as u32,
+                    bgd_cnode_cap
+                );
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container, 
+                    parent_cnode_id,
+                    (PD_BASE_PD_VSP_CAP) as u32,
+                    capdl_util_make_page_table_cap(pd_vspace_obj_id)
+                );
+            }
+        }
+
+    // You can use capdl_util to
+    // 1. make an object (if there is a requirement)
+    // 2. make a capability with the given object
+    // 3. insert the capability to a given CNode with capdl_util_insert_cap_into_cspace
         pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
 
         // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
