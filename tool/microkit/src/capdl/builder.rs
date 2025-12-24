@@ -580,6 +580,8 @@ pub fn build_capdl_spec(
     let mut pd_id_to_cspace_id: HashMap<usize, ObjectId> = HashMap::new();
     let mut pd_id_to_ntfn_id: HashMap<usize, ObjectId> = HashMap::new();
     let mut pd_id_to_ep_id: HashMap<usize, ObjectId> = HashMap::new();
+    // and background CNode (BGD)
+    let mut pd_id_to_bgd_id: HashMap<usize, ObjectId> = HashMap::new();
 
     // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
     // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
@@ -1080,6 +1082,7 @@ pub fn build_capdl_spec(
     // 2. make a capability with the given object
     // 3. insert the capability to a given CNode with capdl_util_insert_cap_into_cspace
         pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
+        pd_id_to_bgd_id.insert(pd_global_idx, bgd_cnode_obj_id);
 
         // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
         if let Object::Tcb(pd_tcb) = &mut spec_container
@@ -1135,6 +1138,9 @@ pub fn build_capdl_spec(
         let pd_b_cspace_id = *pd_id_to_cspace_id.get(&channel.end_b.pd).unwrap();
         let pd_a_ntfn_id = *pd_id_to_ntfn_id.get(&channel.end_a.pd).unwrap();
         let pd_b_ntfn_id = *pd_id_to_ntfn_id.get(&channel.end_b.pd).unwrap();
+        // Get background CNode if optional...
+        let pd_a_bgd_id = *pd_id_to_bgd_id.get(&channel.end_a.pd).unwrap();
+        let pd_b_bgd_id = *pd_id_to_bgd_id.get(&channel.end_b.pd).unwrap();
 
         // We trust that the SDF parsing code have checked for duplicate IDs.
         if channel.end_a.notify {
@@ -1145,8 +1151,16 @@ pub fn build_capdl_spec(
                 &mut spec_container,
                 pd_a_cspace_id,
                 pd_a_ntfn_cap_idx as u32,
-                pd_a_ntfn_cap,
+                pd_a_ntfn_cap.clone(),
             );
+            if channel.optional == true {
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_a_bgd_id,
+                    (BGD_CNODE_NOTIFICATION_CAP + channel.end_a.id) as u32,
+                    pd_a_ntfn_cap,
+                );
+            }
         }
 
         if channel.end_b.notify {
@@ -1157,8 +1171,16 @@ pub fn build_capdl_spec(
                 &mut spec_container,
                 pd_b_cspace_id,
                 pd_b_ntfn_cap_idx as u32,
-                pd_b_ntfn_cap,
+                pd_b_ntfn_cap.clone(),
             );
+            if channel.optional == true {
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_b_bgd_id,
+                    (BGD_CNODE_NOTIFICATION_CAP + channel.end_b.id) as u32,
+                    pd_b_ntfn_cap,
+                );
+            }
         }
 
         if channel.end_a.pp {
@@ -1171,8 +1193,16 @@ pub fn build_capdl_spec(
                 &mut spec_container,
                 pd_a_cspace_id,
                 pd_a_ep_cap_idx as u32,
-                pd_a_ep_cap,
+                pd_a_ep_cap.clone(),
             );
+            if channel.optional == true {
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_a_bgd_id,
+                    (BGD_CNODE_PPC_CAP + channel.end_a.id) as u32,
+                    pd_a_ep_cap,
+                );
+            }
         }
 
         if channel.end_b.pp {
@@ -1185,8 +1215,16 @@ pub fn build_capdl_spec(
                 &mut spec_container,
                 pd_b_cspace_id,
                 pd_b_ep_cap_idx as u32,
-                pd_b_ep_cap,
+                pd_b_ep_cap.clone(),
             );
+            if channel.optional == true {
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_b_bgd_id,
+                    (BGD_CNODE_PPC_CAP + channel.end_b.id) as u32,
+                    pd_b_ep_cap,
+                );
+            }
         }
     }
 
