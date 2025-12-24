@@ -26,7 +26,7 @@
             <map mr="mr_client_payload"  vaddr="0x2000000" perms="rw" cached="true" />
             <map mr="mr_trampoline"      vaddr="0x1000000" perms="rw" cached="true" />
             <map mr="mr_trampoline_exec" vaddr="0x1800000" perms="rw" cached="true" />
-            <map mr="mr_trusted_loader"  vaddr="0x0200000" perms="rw" cached="true" />
+            <map mr="mr_trusted_loader"  vaddr="0x0200000" perms="rw" cached="true" optional="false" />
 
             <map mr="mr_client_exec"      vaddr="0x2800000" perms="rw" cached="true" />
             <map mr="mr_trampoline_stack" vaddr="0x00FFFDFF000" perms="rw" cached="true" />
@@ -34,4 +34,10 @@
 
         </protection_domain>
     </template>
+
+    <channel optional="true">
+        <end pd="pd_tem" id="4" />
+        <end pd="pd_dyn" id="6" />
+    </channel>
+
 </system>

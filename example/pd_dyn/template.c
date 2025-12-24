@@ -54,7 +54,22 @@ void init(void)
     serial_puts("hello!\n");
 
     // test capDL spec generation and capability distribution...
-    seL4_Signal(410);
+    seL4_Signal(425);
+    seL4_Signal(441);
+
+    seL4_Error err = seL4_CNode_Copy(
+        425,    // target CNode
+        16,     // target slot
+        64,     // PD_CAP_BITS
+        441,    // source CNode
+        16,     // source slot
+        64,     // PD_CAP_BITS
+        seL4_AllRights
+    );
+    if (err != seL4_NoError) {
+        microkit_dbg_printf("Failed to copy channel cap from BGD to working CNode\n");
+        //microkit_internal_crash(err);
+    }
 }
 
 void notified(microkit_channel ch)

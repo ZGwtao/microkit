@@ -32,7 +32,10 @@ void init(void)
     microkit_dbg_puts("\n");
 
     microkit_dbg_puts("Now writing to serial I/O port: ");
-    serial_puts("hello!\n");
+    //serial_puts("hello!\n");
+
+    // Signal CSpace cap for the working CNode...
+    seL4_Signal(8);
 }
 
 void notified(microkit_channel ch)
