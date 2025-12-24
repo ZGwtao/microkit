@@ -394,6 +394,8 @@ fn map_memory_region(
     page_sz: u64,
     target_vspace: ObjectId,
     frames: &[ObjectId],
+    cnode: &mut Vec<CapTableEntry>,
+    map_slot: u32,
 ) {
     let mut cur_vaddr = map.vaddr;
     let read = map.perms & SysMapPerms::Read as u8 != 0;
@@ -401,6 +403,7 @@ fn map_memory_region(
     let execute = map.perms & SysMapPerms::Execute as u8 != 0;
     let cached = map.cached;
     let optional = map.optional;
+    let mut cap_map_slot = map_slot;
     for frame_obj_id in frames.iter() {
         // Make a cap for this frame.
         let frame_cap = capdl_util_make_frame_cap(*frame_obj_id, read, write, execute, cached);
@@ -410,13 +413,18 @@ fn map_memory_region(
             sel4_config,
             pd_name,
             target_vspace,
-            frame_cap,
+            frame_cap.clone(),
             page_sz,
             cur_vaddr,
             optional,
         )
         .unwrap();
         cur_vaddr += page_sz;
+        if optional == true {
+            cnode.push(capdl_util_make_cte(cap_map_slot as u32, frame_cap));
+            cap_map_slot += 1;
+            assert!(cap_map_slot <= PD_CAP_SIZE);
+        }
     }
 }
 
@@ -643,6 +651,7 @@ pub fn build_capdl_spec(
         }
 
         // Step 3-2: Map in all Memory Regions
+        let mut map_slot = BGD_CNODE_MAPPING_CAP;
         for map in pd.maps.iter() {
             let frames = mr_name_to_frames.get(&map.mr).unwrap();
             // MRs have frames of equal size so just use the first frame's page size.
@@ -676,7 +685,14 @@ pub fn build_capdl_spec(
                 page_size_bytes,
                 pd_vspace_obj_id,
                 frames,
+                &mut caps_to_insert_to_pd_bgd,
+                map_slot as u32,
             );
+            // Update the mapping slot in BGD
+            if map.optional {
+                map_slot += frames.len() as u64;
+                assert!(map_slot <= PD_CAP_SIZE.into());
+            }
         }
 
         // Step 3-3: Create and map in the stack (bottom up)
@@ -858,6 +874,8 @@ pub fn build_capdl_spec(
                     page_size_bytes,
                     vm_vspace_obj_id,
                     frames,
+                    &mut caps_to_insert_to_pd_bgd,
+                    0, // FIXME
                 );
             }
 
