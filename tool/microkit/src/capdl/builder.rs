@@ -1042,7 +1042,7 @@ pub fn build_capdl_spec(
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container, 
                     parent_cnode_id,
-                    (PD_BASE_PD_CND_CAP) as u32,
+                    (PD_BASE_PD_CND_CAP + pd.id.unwrap()) as u32,
                     pd_cnode_cap
                 );
             }
@@ -1063,13 +1063,13 @@ pub fn build_capdl_spec(
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container, 
                     parent_cnode_id,
-                    (PD_BASE_PD_BGD_CAP) as u32,
+                    (PD_BASE_PD_BGD_CAP + pd.id.unwrap()) as u32,
                     bgd_cnode_cap
                 );
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container, 
                     parent_cnode_id,
-                    (PD_BASE_PD_VSP_CAP) as u32,
+                    (PD_BASE_PD_VSP_CAP + pd.id.unwrap()) as u32,
                     capdl_util_make_page_table_cap(pd_vspace_obj_id)
                 );
             }
