@@ -283,6 +283,7 @@ impl CapDLSpecContainer {
                     frame_cap,
                     page_size_bytes,
                     cur_vaddr,
+                    false,
                 ) {
                     Ok(_) => {
                         frame_sequence += 1;
@@ -333,6 +334,7 @@ impl CapDLSpecContainer {
             ipcbuf_frame_cap,
             PageSize::Small as u64,
             ipcbuf_vaddr,
+            false,
         ) {
             Ok(_) => {}
             Err(map_err_reason) => {
@@ -398,6 +400,7 @@ fn map_memory_region(
     let write = map.perms & SysMapPerms::Write as u8 != 0;
     let execute = map.perms & SysMapPerms::Execute as u8 != 0;
     let cached = map.cached;
+    let optional = map.optional;
     for frame_obj_id in frames.iter() {
         // Make a cap for this frame.
         let frame_cap = capdl_util_make_frame_cap(*frame_obj_id, read, write, execute, cached);
@@ -410,6 +413,7 @@ fn map_memory_region(
             frame_cap,
             page_sz,
             cur_vaddr,
+            optional,
         )
         .unwrap();
         cur_vaddr += page_sz;
@@ -501,6 +505,7 @@ pub fn build_capdl_spec(
         mon_stack_frame_cap,
         PageSize::Small as u64,
         kernel_config.pd_stack_bottom(MON_STACK_SIZE),
+        false,
     )
     .unwrap();
 
@@ -698,6 +703,7 @@ pub fn build_capdl_spec(
                 stack_frame_cap,
                 PageSize::Small as u64,
                 cur_stack_vaddr,
+                false,
             )
             .unwrap();
             cur_stack_vaddr += PageSize::Small as u64;

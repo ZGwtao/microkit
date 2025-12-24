@@ -266,6 +266,7 @@ fn map_recursive(
     frame_cap: Cap,
     frame_size_bytes: u64,
     vaddr: u64,
+    optional: bool,
 ) -> Result<(), String> {
     if cur_level >= sel4_config.num_page_table_levels() {
         unreachable!("internal bug: we should have never recursed further!");
@@ -274,14 +275,18 @@ fn map_recursive(
     let this_level_index = get_pt_level_index(sel4_config, cur_level, vaddr);
 
     if cur_level == get_pt_level_to_insert(sel4_config, frame_size_bytes) {
-        // Base case: we got to the target level to insert the frame cap.
-        insert_cap_into_page_table_level(
-            spec_container,
-            pt_obj_id,
-            cur_level,
-            this_level_index,
-            frame_cap,
-        )
+        if optional == false {
+            // Base case: we got to the target level to insert the frame cap.
+            insert_cap_into_page_table_level(
+                spec_container,
+                pt_obj_id,
+                cur_level,
+                this_level_index,
+                frame_cap,
+            )
+        } else {
+            Ok(())
+        }
     } else {
         // Recursive case: we have not gotten to the correct level, create the next level and recurse down.
         let next_level_name_prefix = get_pt_level_name(sel4_config, cur_level + 1);
@@ -306,6 +311,7 @@ fn map_recursive(
                 frame_cap,
                 frame_size_bytes,
                 vaddr,
+                optional,
             ),
             Err(err_reason) => Err(err_reason),
         }
@@ -320,6 +326,7 @@ pub fn map_page(
     frame_cap: Cap,
     frame_size_bytes: u64,
     vaddr: u64,
+    optional: bool,
 ) -> Result<(), String> {
     map_recursive(
         spec_container,
@@ -331,5 +338,6 @@ pub fn map_page(
         frame_cap,
         frame_size_bytes,
         vaddr,
+        optional,
     )
 }
