@@ -160,9 +160,9 @@ pub struct AcGrp {
     pub grp_init:   bool,
     pub grp_idx:    u8,
     pub grp_type:   u8,
-    pub channels:   [u8; 8],
-    pub irqs:       [u8; 8],
-    pub mappings:   [StrippedMapping; 16],
+    pub channels:   [u8; 4],
+    pub irqs:       [u8; 4],
+    pub mappings:   [StrippedMapping; 4],
     pub data_name:  DataNameCStr,
 }
 impl Default for AcGrp {
@@ -171,23 +171,25 @@ impl Default for AcGrp {
             grp_init:   false,
             grp_idx:    0,
             grp_type:   0,
-            channels:   [!0u8; 8],
-            irqs:       [!0u8; 8],
-            mappings:   [StrippedMapping::default(); 16],
+            channels:   [!0u8; 4],
+            irqs:       [!0u8; 4],
+            mappings:   [StrippedMapping::default(); 4],
             data_name:  DataNameCStr::default(),
         }
     }
 }
 
+/// AcGrpArr:
+///  records the available access rights domain that belongs to
+///  one dynamic PD, whose limit for the domains equals 16
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct AcGrpArr {
     pub pd_idx: u8,
-    // number of available grps in the list...
-    // FIXME: sequential ID required
+    // number of available access rights domain
     pub grp_num: u8,
-    // FIXME: I don't think have 64 acgroups is practical...
-    pub array: [AcGrp; 32],
+    // Each dynamic PD has at most 16 access rights domain available
+    pub array: [AcGrp; 16],
 }
 impl Default for AcGrpArr {
     fn default() -> Self {
@@ -200,11 +202,14 @@ impl Default for AcGrpArr {
     }
 }
 
+/// AcGrpArrList:
+///  records the list of access rights compilation of each dynamic PD
+///  that belongs to one template PD
 #[repr(C)]
 pub struct AcGrpArrList {
-    // FIXME: we are assuming all acg_arr IDs are sequential
+    // The number of available dynamic PD in a template PD
     pub num: usize,
-    // FIXME: also 64 child PD is not practical...
+    // Each template PD has at most 16 dynamic PD available
     pub list: [AcGrpArr; 16],
 }
 impl Default for AcGrpArrList {

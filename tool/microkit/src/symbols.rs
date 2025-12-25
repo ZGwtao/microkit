@@ -10,7 +10,7 @@ use crate::{
     elf::ElfFile,
     sdf::{self, SysMemoryRegion, SystemDescription},
     sel4::{Arch, Config},
-    trustedlo::{AcGrpArrList, TrustedLoaderMetadataArray, MemoryMapping},
+    trustedlo::{AcGrpArrList, AcGrpArr, TrustedLoaderMetadataArray, MemoryMapping, StrippedMapping},
     MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH, MAX_CHANNELS,
     util::{monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes}
 };
@@ -193,7 +193,7 @@ pub fn patch_symbols_template_pd(
     pd_elf_files: &mut [ElfFile],
     system: &SystemDescription,
 ) -> Result<(), String> {
-    for (tpl_idx, tpl_pd) in system.protection_domains
+    for (tpl_idx, _) in system.protection_domains
         .iter()
         .enumerate()
         .filter(|(_, pd)| pd.is_template)
@@ -246,7 +246,6 @@ pub fn patch_symbols_template_pd(
             // Each optional mapping contains no less than 1 frame (which means it is a region)
             // Each PD has a vector of optional mappings, referenced by PD indices
             // Within one vector, we can refer to a mapping using the mapping indices
-            let mut opt_mappings = [MemoryMapping::default(); MAX_CHANNELS];
             for (map_idx, map) in c.maps_opt.iter().enumerate() {
                 spec_trusted_loader.trusted_loader_md_array[child_idx].mappings[map_idx] = MemoryMapping {
                     vaddr: map.vaddr,
@@ -260,13 +259,52 @@ pub fn patch_symbols_template_pd(
             spec_trusted_loader.avail_trusted_loader += 1;
         } 
 
+        for (curr_idx, c) in system.protection_domains
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| c.parent == Some(tpl_idx))
+        {
+            let mut acg_arr = AcGrpArr::default();
+            acg_arr.pd_idx = curr_idx as u8;
+
+            for (acg_idx, a) in c.acgrps.iter().enumerate() {
+                acg_arr.array[acg_idx].grp_type = a.grp_type as u8;
+                acg_arr.array[acg_idx].grp_idx = acg_idx as u8;
+
+                for (map_idx, map) in a.maps.iter().enumerate() {
+                    if let Some(gm) = c.maps_opt.iter().find(|gm| gm.vaddr == map.vaddr) {
+                        acg_arr.array[acg_idx].mappings[map_idx] = StrippedMapping {
+                            vaddr: gm.vaddr,
+                            number_of_pages: gm.number_of_pages,
+                            page_size: gm.page_size,
+                        };
+                    }
+                }
+
+                for (e_idx, end) in a.ends.iter().enumerate() {
+                    if e_idx >= 8 {
+                        break;
+                    }
+                    acg_arr.array[acg_idx].channels[e_idx] = *end as u8;
+                }
+                acg_arr.array[acg_idx].data_name.set_trunc(a.data_name.as_str());
+                acg_arr.array[acg_idx].grp_init = true;
+                acg_arr.grp_num += 1;
+            }
+
+            assert!(acg_arr.grp_num == c.acgrps.len() as u8);
+            spec_access_rights.list[spec_access_rights.num] = acg_arr.clone();
+            spec_access_rights.num += 1;
+        }
+
         let elf_obj = &mut pd_elf_files[tpl_idx];
         elf_obj
             .write_symbol("microkit_template_spec", unsafe { struct_to_bytes(&spec_trusted_loader) })
             .unwrap();
-        //elf_obj
-        //    .write_symbol("microkit_template_spec_ar", unsafe { struct_to_bytes(&spec_access_rights) })
-        //    .unwrap();
+
+        elf_obj
+            .write_symbol("microkit_template_spec_ar", unsafe { struct_to_bytes(&spec_access_rights) })
+            .unwrap();
     }
 
     Ok(())

@@ -23,6 +23,7 @@
 bool microkit_passive;
 char microkit_name[MICROKIT_PD_NAME_LENGTH];
 char microkit_template_spec[MICROKIT_TEMPLATE_SPEC_LENGTH];
+char microkit_template_spec_ar[MICROKIT_TEMPLATE_SPEC_AR_LENGTH];
 /* We use seL4 typedefs as this variable is exposed to the libmicrokit header
  * and we do not want to rely on compiler built-in defines. */
 seL4_Bool microkit_have_signal = seL4_False;

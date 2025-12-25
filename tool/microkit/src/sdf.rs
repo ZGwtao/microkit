@@ -624,7 +624,7 @@ impl ProtectionDomain {
         }
 
         let mut maps = Vec::new();
-        let mut maps_opt = Vec::new();
+        let maps_opt = Vec::new();
         let mut irqs = Vec::new();
         let mut ioports = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
