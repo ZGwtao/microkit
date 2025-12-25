@@ -321,10 +321,6 @@ impl CapDLSpecContainer {
         // We need to clone the IPC buf cap because in addition to mapping the frame into the VSpace, we need to bind
         // this frame to the TCB as well.
         let ipcbuf_frame_cap_for_tcb = ipcbuf_frame_cap.clone();
-        //let ipcbuf_vaddr = elf
-        //    .find_symbol(SYMBOL_IPC_BUFFER)
-        //    .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"))
-        //    .0;
         let ipcbuf_vaddr: u64;
         if is_dyn == true {
             ipcbuf_vaddr = 0x100_000;
@@ -615,10 +611,7 @@ pub fn build_capdl_spec(
         let elf_obj = &elfs[pd_global_idx];
 
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
-    // NOTE
-    // this vector describes the slot of working CNode for each PD
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
-    // this vector describes the slot of background CNode for each PD
         let mut caps_to_insert_to_pd_bgd: Vec<CapTableEntry> = Vec::new();
 
         let mut is_dyn = false;
