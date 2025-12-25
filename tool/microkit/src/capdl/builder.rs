@@ -104,6 +104,14 @@ const PD_BASE_PD_CND_CAP: u64 = PD_BASE_IOPORT_CAP + 16;
 const PD_BASE_PD_BGD_CAP: u64 = PD_BASE_PD_CND_CAP + 16;
 // (working) VSpace cap for the child PD
 const PD_BASE_PD_VSP_CAP: u64 = PD_BASE_PD_BGD_CAP + 16;
+// As a template PD, it runs a prologue for trusted loading
+// which requires the access to the working CNode of the template PD
+// (in return, the template PD must be trusted)
+// (this works for dynamic PD too, but we don't grant it for them in here)
+const PD_BASE_PD_SELF_CND_CAP: u64 = PD_BASE_PD_VSP_CAP + 1;
+// As a dynamic PD, it should be able to access its BGD for self loading
+// but we don't grant access for them in here
+//const PD_BASE_PD_SELF_BGD_CAP: u64 = PD_BASE_PD_SELF_CND_CAP + 1;
 
 // Where to find the working CNode from the background CNode
 const BGD_CSPACE_CAP_IDX: u64 = 8;
@@ -1037,9 +1045,6 @@ pub fn build_capdl_spec(
         }
 
         // Step 3-13 Create CSpace and add all caps that the PD code and libmicrokit need to access.
-
-    // This is where we create the working CNode for each PD
-    // The working CNode contains only what a PD should access for working
         let pd_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
             &pd.name,
@@ -1048,11 +1053,19 @@ pub fn build_capdl_spec(
         );
         let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
         let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
-    // I think this CNode cap actually lives in the CapDL initialiser?
         caps_to_bind_to_tcb.push(capdl_util_make_cte(
             TcbBoundSlot::CSpace as u32,
             pd_cnode_cap.clone(),
         ));
+        // Allow each template PD to access its CNode
+        if pd.is_template == true {
+            capdl_util_insert_cap_into_cspace(
+                &mut spec_container,
+                pd_cnode_obj_id,
+                PD_BASE_PD_SELF_CND_CAP as u32,
+                pd_cnode_cap.clone()
+            );
+        }
 
         if let Some(parent_idx) = pd.parent {
             let parent = &system.protection_domains[parent_idx];
@@ -1101,10 +1114,6 @@ pub fn build_capdl_spec(
             }
         }
 
-    // You can use capdl_util to
-    // 1. make an object (if there is a requirement)
-    // 2. make a capability with the given object
-    // 3. insert the capability to a given CNode with capdl_util_insert_cap_into_cspace
         pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
         pd_id_to_bgd_id.insert(pd_global_idx, bgd_cnode_obj_id);
 
