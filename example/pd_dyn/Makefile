@@ -37,14 +37,19 @@ AR := $(TOOLCHAIN)-ar
 OBJCOPY := $(TOOLCHAIN)-objcopy
 MICROKIT_TOOL ?= $(MICROKIT_SDK)/bin/microkit
 
+LIBTSLDR_SRC_DIR := $(CURDIR)/trustedloader
 LIBEXTELF_SRC_DIR := $(CURDIR)/extelf
+
+include $(LIBTSLDR_SRC_DIR)/Makefile
 include $(LIBEXTELF_SRC_DIR)/Makefile
 
-IMAGES := template.elf x86_64_ioport.elf
+IMAGES := template.elf protocon.elf
 CFLAGS := -nostdlib -ffreestanding -g3 -O3 \
 			-I$(BOARD_DIR)/include $(CFLAGS_ARCH) \
-			-I$(LIBEXTELF_SRC_DIR)/include
-LDFLAGS := -L$(BOARD_DIR)/lib -z noexecstack -L$(LIBEXTELF_BUILD_DIR)
+			-I$(LIBEXTELF_SRC_DIR)/include \
+			-I$(LIBTSLDR_SRC_DIR)/include
+
+LDFLAGS := -L$(BOARD_DIR)/lib -z noexecstack -L$(LIBEXTELF_BUILD_DIR) -L$(LIBTSLDR_BUILD_DIR)
 LIBS := -lmicrokit -Tmicrokit.ld
 
 INITIAL_TASK = $(BUILD_DIR)/initialiser.elf
@@ -64,15 +69,15 @@ $(BUILD_DIR)/template.o: template.c Makefile
 $(BUILD_DIR)/template.elf: $(BUILD_DIR)/template.o $(PACKAGE_OBJS) ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
-$(BUILD_DIR)/x86_64_ioport.o: x86_64_ioport.c Makefile
+$(BUILD_DIR)/protocon.o: protocon.c Makefile
 	$(CC) -c $(CFLAGS) -Wall -Wno-unused-function -Werror $< -o $@
 
-$(BUILD_DIR)/x86_64_ioport.elf: $(BUILD_DIR)/x86_64_ioport.o
+$(BUILD_DIR)/protocon.elf: $(BUILD_DIR)/protocon.o $(LIBTSLDR) ${LIBEXTELF}
 	$(LD) $(LDFLAGS) --defsym __sel4_ipc_buffer=0x100000 $^ $(LIBS) -o $@
 
-$(PACKAGE_OBJS): package.S $(BUILD_DIR)/x86_64_ioport.elf
+$(PACKAGE_OBJS): package.S $(BUILD_DIR)/protocon.elf
 	$(CC) -c -g3 -x assembler-with-cpp \
-		-DLOADER_PATH=\"$(BUILD_DIR)/x86_64_ioport.elf\" \
+		-DLOADER_PATH=\"$(BUILD_DIR)/protocon.elf\" \
 		package.S -o $@
 
 $(KERNEL) $(KERNEL_32B) $(INITIAL_TASK): $(addprefix $(BUILD_DIR)/, $(IMAGES)) pd_dyn.system

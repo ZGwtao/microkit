@@ -1,0 +1,154 @@
+/*
+ * Copyright 2025, UNSW
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+#include "elfutils.h"
+#include <stddef.h>
+#include <stdint.h>
+#include <stdarg.h>
+#include <microkit.h>
+#include <libtrustedlo.h>
+#include <string.h>
+//#include <sddf/timer/config.h>
+
+#define PROGNAME "[@protocon] "
+
+void microkit_dbg_printf(const char *format, ...);
+
+/* 4KB in size, read-only */
+uintptr_t tsldr_metadata    = 0x0A00000;
+uintptr_t acgroup_metadata  = 0x0A01000;
+uintptr_t trampoline_elf    = 0x1000000;
+uintptr_t container_elf     = 0x2000000;
+uintptr_t container_exec    = 0x2800000;
+
+#define STACKS_SIZE 0x1000
+
+uintptr_t trampoline_stack_top  = (0x00FFFE00000);
+uintptr_t tsldr_stack_bottom    = (0x00FFFFFF000);
+uintptr_t container_stack_top   = (0x00FFFC00000);
+
+typedef void (*entry_fn_t)(void);
+
+/*
+ * vaddr: 0xE00000
+ * Should not be static because it needs to be patched externally
+ */
+trusted_loader_t *loader_context;
+
+__attribute__((noreturn, naked))
+static void jump_with_stack(void *new_stack, void (*entry)(void))
+{
+    __asm__ volatile(
+        "mov %rdi, %rsp\n\t"   /* new_stack in rdi */
+        "jmp *%rsi\n\t"        /* entry in rsi */
+    );
+}
+
+void init(void)
+{
+    __sel4_ipc_buffer = (seL4_IPCBuffer *)0x100000;
+    loader_context = (trusted_loader_t *)0xE00000;
+
+    microkit_dbg_printf(PROGNAME "Entered init\n");
+
+    tsldr_md_t *md = (tsldr_md_t *)tsldr_metadata;
+    if (!md->init) {
+        microkit_internal_crash(-1);
+    }
+    microkit_dbg_printf(PROGNAME "trusted loading metadata is ready...\n");
+
+    seL4_Error error = tsldr_loading_prologue(loader_context);
+    if (error != seL4_NoError) {
+        microkit_dbg_printf(PROGNAME "trusted loading prologue fails!\n");
+        microkit_internal_crash(error);
+    }
+
+    /* initialise the real trusted loader... */
+    if (loader_context->flags.init != true) {
+        microkit_dbg_printf(PROGNAME "Init loader context\n");
+        tsldr_init(loader_context, md->child_id);
+        /* loader is now initialised... */
+        loader_context->flags.init = true;
+    }
+#if 1
+    /* start to parse client elf information */
+    Elf64_Ehdr *ehdr = (Elf64_Ehdr *)container_elf;
+    /* check elf integrity */
+    if (custom_memcmp(ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
+        microkit_dbg_printf(PROGNAME "Data in shared memory region must be an ELF file\n");
+        microkit_internal_crash(-1);
+    } else {
+        microkit_dbg_printf(PROGNAME "Data in shared memory region is an ELF file\n");
+    }
+    microkit_dbg_printf(PROGNAME "Verified ELF header\n");
+#endif
+    Elf64_Ehdr *trampoline_ehdr = (Elf64_Ehdr *)trampoline_elf;
+    /* check elf integrity */
+    if (custom_memcmp(trampoline_ehdr->e_ident, (const unsigned char*)ELFMAG, SELFMAG) != 0) {
+        microkit_dbg_printf(PROGNAME "Data in trampoline region must be an ELF file\n");
+        microkit_internal_crash(-1);
+    } else {
+        microkit_dbg_printf(PROGNAME "Data in trampoline region is an ELF file\n");
+    }
+    microkit_dbg_printf(PROGNAME "Verified ELF header\n");
+
+    char *section = (char *)acgroup_metadata;
+    seL4_Word section_size = 0;
+#if 0
+    /* parse access rights table */
+    error = tsldr_parse_rights(ehdr, &section, &section_size);
+    if (error) {
+        microkit_internal_crash(error);
+    }
+#endif
+    /* populate the access rights to the loader */
+    error = tsldr_populate_rights(loader_context, (unsigned char *)section, section_size);
+    if (error) {
+        microkit_internal_crash(-1);
+    }
+    microkit_dbg_printf(PROGNAME "Finished up access rights integrity checking\n");
+
+    tsldr_restore_caps(loader_context, true);
+
+    /* (really) populate allowed access rights */
+    error = tsldr_populate_allowed(loader_context);
+    if (error != seL4_NoError) {
+        microkit_internal_crash(-1);
+    }
+
+    tsldr_remove_caps(loader_context, true);
+
+    tsldr_loading_epilogue(container_exec, (uintptr_t)0x0);
+
+    load_elf((void *)ehdr->e_entry, ehdr);
+    microkit_dbg_printf(PROGNAME "Load client elf to the targeting memory region\n");
+
+    load_elf((void *)trampoline_ehdr->e_entry, trampoline_ehdr);
+    microkit_dbg_printf(PROGNAME "Load trampoline elf to the targeting memory region\n");
+
+    /* -- now we are ready to jump to the trampoline -- */
+
+    microkit_dbg_printf(PROGNAME "Switch to the trampoline's code to execute\n");
+    entry_fn_t entry_fn = (entry_fn_t) trampoline_ehdr->e_entry;
+#if 0
+    /* jump to trampoline */
+    asm volatile (
+        "mov %[new_stack], %%rsp\n\t"   /* set new RSP */
+        "jmp *%[func]\n\t"              /* jump directly, never return */
+        :
+        : [new_stack] "r" (trampoline_stack_top),
+        [func] "r" (entry_fn)
+        : "rsp", "memory"
+    );
+#else
+    jump_with_stack((void *)trampoline_stack_top, entry_fn);
+#endif
+    __builtin_unreachable();
+}
+
+void notified(microkit_channel ch)
+{
+    microkit_dbg_printf(PROGNAME "Received notification on channel: %d\n", ch);
+}
