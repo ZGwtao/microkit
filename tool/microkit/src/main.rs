@@ -649,6 +649,10 @@ fn main() -> Result<(), String> {
         }
 
         let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
+        if let Err(err) = patch_symbols_template_pd(&kernel_config, &mut system_elfs, &system) {
+            eprintln!("ERROR: {err}");
+            std::process::exit(1);
+        }
         pack_spec_into_initial_task(
             &kernel_config,
             args.config,
@@ -656,12 +660,6 @@ fn main() -> Result<(), String> {
             &system_elfs,
             &mut capdl_initialiser,
         );
-
-        // Patch all the required symbols for template PD once the spec is generated
-        if let Err(err) = patch_symbols_template_pd(&kernel_config, &mut system_elfs, &system) {
-            eprintln!("ERROR: {err}");
-            std::process::exit(1);
-        }
 
         match kernel_config.arch {
             Arch::X86_64 => {
