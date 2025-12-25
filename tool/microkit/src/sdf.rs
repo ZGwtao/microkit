@@ -19,6 +19,7 @@
 use crate::sel4::{
     Arch, ArmRiscvIrqTrigger, Config, PageSize, X86IoapicIrqPolarity, X86IoapicIrqTrigger,
 };
+use crate::trustedlo::MemoryMapping;
 use crate::util::{ranges_overlap, str_to_bool};
 use crate::MAX_PDS;
 use std::collections::HashSet;
@@ -260,6 +261,7 @@ pub struct ProtectionDomain {
     pub cpu: CpuCore,
     pub program_image: Option<PathBuf>,
     pub maps: Vec<SysMap>,
+    pub maps_opt: Vec<MemoryMapping>,
     pub irqs: Vec<SysIrq>,
     pub ioports: Vec<IOPort>,
     pub setvars: Vec<SysSetVar>,
@@ -622,6 +624,7 @@ impl ProtectionDomain {
         }
 
         let mut maps = Vec::new();
+        let mut maps_opt = Vec::new();
         let mut irqs = Vec::new();
         let mut ioports = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
@@ -1125,6 +1128,7 @@ impl ProtectionDomain {
             cpu,
             program_image,
             maps,
+            maps_opt,
             irqs,
             ioports,
             setvars,

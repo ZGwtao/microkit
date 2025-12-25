@@ -648,8 +648,11 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
 
-        let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
-        if let Err(err) = patch_symbols_template_pd(&kernel_config, &mut system_elfs, &system) {
+        let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &mut system)?;
+        if let Err(err) = patch_symbols_template_pd(
+            &mut system_elfs,
+            &system
+        ) {
             eprintln!("ERROR: {err}");
             std::process::exit(1);
         }

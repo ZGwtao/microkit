@@ -10,7 +10,7 @@ use crate::{
     elf::ElfFile,
     sdf::{self, SysMemoryRegion, SystemDescription},
     sel4::{Arch, Config},
-    trustedlo::{AcGrpArrList, TrustedLoaderMetadataArray},
+    trustedlo::{AcGrpArrList, TrustedLoaderMetadataArray, MemoryMapping},
     MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH, MAX_CHANNELS,
     util::{monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes}
 };
@@ -190,7 +190,6 @@ pub fn patch_symbols(
 
 /// Patch all the required symbold in template PDs
 pub fn patch_symbols_template_pd(
-    kernel_config: &Config,
     pd_elf_files: &mut [ElfFile],
     system: &SystemDescription,
 ) -> Result<(), String> {
@@ -243,8 +242,23 @@ pub fn patch_symbols_template_pd(
             spec_trusted_loader.trusted_loader_md_array[child_idx].channels.copy_from_slice(&opt_channel);
             spec_trusted_loader.trusted_loader_md_array[child_idx].cstate.copy_from_slice(&opt_channel_attr);
 
+            // Iterate all optional mappings for each dynamic PD
+            // Each optional mapping contains no less than 1 frame (which means it is a region)
+            // Each PD has a vector of optional mappings, referenced by PD indices
+            // Within one vector, we can refer to a mapping using the mapping indices
+            let mut opt_mappings = [MemoryMapping::default(); MAX_CHANNELS];
+            for (map_idx, map) in c.maps_opt.iter().enumerate() {
+                spec_trusted_loader.trusted_loader_md_array[child_idx].mappings[map_idx] = MemoryMapping {
+                    vaddr: map.vaddr,
+                    page: map.page,
+                    number_of_pages: map.number_of_pages,
+                    page_size: map.page_size,
+                    rights: map.rights,
+                    attrs: map.attrs,
+                }
+            }
             spec_trusted_loader.avail_trusted_loader += 1;
-        }
+        } 
 
         let elf_obj = &mut pd_elf_files[tpl_idx];
         elf_obj

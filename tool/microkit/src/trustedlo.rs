@@ -8,33 +8,8 @@ use crate::{
     MAX_CHANNELS
 };
 
-#[allow(dead_code)]
 #[repr(C)]
-#[derive(Clone, Copy)]
-pub struct OptionalMapping {
-    vaddr: u64,
-    page: u64,
-    number_of_pages: u64,
-    page_size: u64,
-    rights: u64,
-    attrs: u64,
-}
-
-impl OptionalMapping {
-    pub fn default() -> Self {
-        OptionalMapping {
-            vaddr: 0,
-            page: 0,
-            number_of_pages: 0,
-            page_size: 0,
-            rights: 0,
-            attrs: 0,
-        }
-    }
-}
-
-#[repr(C)]
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub struct MemoryMapping {
     pub vaddr: u64,
     pub page: u64,

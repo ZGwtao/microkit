@@ -19,16 +19,11 @@ use crate::{
     capdl::{
         irq::create_irq_handler_cap,
         memory::{create_vspace, create_vspace_ept, map_page},
-        spec::{capdl_obj_physical_size_bits, ElfContent},
+        spec::{ElfContent, capdl_obj_physical_size_bits},
         util::*,
-    },
-    elf::ElfFile,
-    sdf::{
-        CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
-        MONITOR_PRIORITY,
-    },
-    sel4::{Arch, Config, PageSize},
-    util::{ranges_overlap, round_down, round_up},
+    }, elf::ElfFile, sdf::{
+        BUDGET_DEFAULT, CpuCore, MONITOR_PD_NAME, MONITOR_PRIORITY, SysMap, SysMapPerms, SystemDescription
+    }, sel4::{Arch, Config, PageSize}, trustedlo::MemoryMapping, util::{ranges_overlap, round_down, round_up}
 };
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
@@ -436,7 +431,7 @@ fn map_memory_region(
 pub fn build_capdl_spec(
     kernel_config: &Config,
     elfs: &mut [ElfFile],
-    system: &SystemDescription,
+    system: &mut SystemDescription,
 ) -> Result<CapDLSpecContainer, String> {
     let mut spec_container = CapDLSpecContainer::new();
 
@@ -607,20 +602,19 @@ pub fn build_capdl_spec(
     // Keep tabs on each PD's stack bottom so we can write it out to the monitor for stack overflow detection.
     let mut pd_stack_bottoms: Vec<u64> = Vec::new();
 
-    for (pd_global_idx, pd) in system.protection_domains.iter().enumerate() {
+    let n = system.protection_domains.len();
+    for pd_global_idx in 0..n {
         let elf_obj = &elfs[pd_global_idx];
 
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
         let mut caps_to_insert_to_pd_bgd: Vec<CapTableEntry> = Vec::new();
 
-        let mut is_dyn = false;
-        if let Some(parent_idx) = pd.parent {
-            let parent = &system.protection_domains[parent_idx];
-            if parent.is_template {
-                is_dyn = true;
-            }
-        }
+        let parent_idx_opt = system.protection_domains[pd_global_idx].parent;
+        let is_dyn = parent_idx_opt
+            .map_or(false, |pi| system.protection_domains[pi].is_template);
+
+        let pd = &mut system.protection_domains[pd_global_idx];
 
         // Step 3-1: Create TCB and VSpace with all ELF loadable frames mapped in.
         let pd_tcb_obj_id = spec_container
@@ -691,6 +685,14 @@ pub fn build_capdl_spec(
             );
             // Update the mapping slot in BGD
             if map.optional {
+                pd.maps_opt.push(MemoryMapping {
+                    vaddr: (map.vaddr),
+                    page: (map_slot - BGD_CNODE_MAPPING_CAP),
+                    number_of_pages: (frames.len() as u64),
+                    page_size: (page_size_bytes),
+                    rights: (0),
+                    attrs: (0)
+                });
                 map_slot += frames.len() as u64;
                 assert!(map_slot <= PD_CAP_SIZE.into());
             }
@@ -1061,8 +1063,7 @@ pub fn build_capdl_spec(
         }
 
         if let Some(parent_idx) = pd.parent {
-            let parent = &system.protection_domains[parent_idx];
-            if parent.is_template {
+            if is_dyn {
                 // Allow background CNode of the dynamic PD to access the VSpace of the same dynamic PD
                 caps_to_insert_to_pd_bgd.push(capdl_util_make_cte(
                     BGD_CSPACE_CAP_IDX as u32,
@@ -1088,8 +1089,7 @@ pub fn build_capdl_spec(
         );
         let bgd_cnode_cap = capdl_util_make_cnode_cap(bgd_cnode_obj_id, 0, pd_guard_size as u8);
         if let Some(parent_idx) = pd.parent {
-            let parent = &system.protection_domains[parent_idx];
-            if parent.is_template {
+            if is_dyn {
                 // Allow the parent PD to access the working CNode of the dynamic PD
                 let parent_cnode_id = *pd_id_to_cspace_id.get(&parent_idx).unwrap();
                 capdl_util_insert_cap_into_cspace(
