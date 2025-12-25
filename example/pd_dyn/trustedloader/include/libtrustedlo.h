@@ -70,7 +70,7 @@ typedef struct {
 typedef struct {
     uint8_t avails;
     /* maximum is 64 per monitor */
-    tsldr_md_t md_array[64];
+    tsldr_md_t md_array[16];
 } tsldr_md_array_t;
 
 typedef struct {

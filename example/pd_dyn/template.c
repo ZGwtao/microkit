@@ -7,6 +7,7 @@
 #include <stdarg.h>
 #include <microkit.h>
 #include <elfutils.h>
+#include <libtrustedlo.h>
 
 uint64_t com1_ioport_id;
 uint64_t com1_ioport_addr;
@@ -70,6 +71,10 @@ void init(void)
         microkit_dbg_printf("Failed to copy channel cap from BGD to working CNode\n");
         //microkit_internal_crash(err);
     }
+
+    tsldr_md_array_t *ptr_spec_trusted_loader = (tsldr_md_array_t *)microkit_template_spec;
+    microkit_dbg_printf("%d\n", ptr_spec_trusted_loader->avails);
+    microkit_dbg_printf("%s\n", microkit_name);
 }
 
 void notified(microkit_channel ch)

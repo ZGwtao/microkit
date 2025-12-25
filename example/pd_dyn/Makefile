@@ -66,7 +66,7 @@ qemu: $(KERNEL_32B) $(INITIAL_TASK)
 $(BUILD_DIR)/template.o: template.c Makefile
 	$(CC) -c $(CFLAGS) -Wall -Wno-unused-function -Werror $< -o $@
 
-$(BUILD_DIR)/template.elf: $(BUILD_DIR)/template.o $(PACKAGE_OBJS) ${LIBEXTELF}
+$(BUILD_DIR)/template.elf: $(BUILD_DIR)/template.o $(PACKAGE_OBJS) $(LIBTSLDR) ${LIBEXTELF}
 	$(LD) $(LDFLAGS) $^ $(LIBS) -o $@
 
 $(BUILD_DIR)/protocon.o: protocon.c Makefile
