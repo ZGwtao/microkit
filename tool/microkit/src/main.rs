@@ -21,7 +21,7 @@ use microkit_tool::sel4::{
     emulate_kernel_boot, emulate_kernel_boot_partial, Arch, Config, PlatformConfig,
     RiscvVirtualMemory,
 };
-use microkit_tool::symbols::patch_symbols;
+use microkit_tool::symbols::{patch_symbols, patch_symbols_template_pd};
 use microkit_tool::util::{
     human_size_strict, json_str, json_str_as_bool, json_str_as_u64, round_down, round_up,
 };
@@ -648,7 +648,6 @@ fn main() -> Result<(), String> {
             std::process::exit(1);
         }
 
-// Should we set capability distribution in here?
         let mut spec_container = build_capdl_spec(&kernel_config, &mut system_elfs, &system)?;
         pack_spec_into_initial_task(
             &kernel_config,
@@ -657,6 +656,12 @@ fn main() -> Result<(), String> {
             &system_elfs,
             &mut capdl_initialiser,
         );
+
+        // Patch all the required symbols for template PD once the spec is generated
+        if let Err(err) = patch_symbols_template_pd(&kernel_config, &mut system_elfs, &system) {
+            eprintln!("ERROR: {err}");
+            std::process::exit(1);
+        }
 
         match kernel_config.arch {
             Arch::X86_64 => {

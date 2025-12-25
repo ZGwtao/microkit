@@ -21,6 +21,7 @@ pub mod sel4;
 pub mod symbols;
 pub mod uimage;
 pub mod util;
+pub mod trustedlo;
 
 // Note that these values are used in the monitor so should also be changed there
 // if any of these were to change.
@@ -31,6 +32,8 @@ pub const MAX_VMS: usize = 63;
 // the monitor and libmicrokit.
 pub const PD_MAX_NAME_LENGTH: usize = 64;
 pub const VM_MAX_NAME_LENGTH: usize = 64;
+// Copied from libmicrokit.h
+pub const MAX_CHANNELS: usize = 62;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct UntypedObject {

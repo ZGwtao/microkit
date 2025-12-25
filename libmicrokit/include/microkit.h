@@ -35,6 +35,9 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define MICROKIT_MAX_IOPORT_ID MICROKIT_MAX_CHANNELS
 #define MICROKIT_PD_NAME_LENGTH 64
 
+/* Only valid in the 'template' configuration */
+#define MICROKIT_TEMPLATE_SPEC_LENGTH   (1UL << 16)
+
 /* User provided functions */
 void init(void);
 void notified(microkit_channel ch);
@@ -46,6 +49,8 @@ extern char microkit_name[MICROKIT_PD_NAME_LENGTH];
 extern seL4_Bool microkit_have_signal;
 extern seL4_CPtr microkit_signal_cap;
 extern seL4_MessageInfo_t microkit_signal_msg;
+
+extern char microkit_template_spec[MICROKIT_TEMPLATE_SPEC_LENGTH];
 
 /* Symbols for error checking libmicrokit API calls. Patched by the Microkit tool
  * to set bits corresponding to valid channels for this PD. */
