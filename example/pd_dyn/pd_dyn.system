@@ -14,6 +14,10 @@
     <memory_region name="mr_trampoline_exec"    size="0x800_000" page_size="0x200_000" />
     <memory_region name="mr_client_exec"        size="0x800_000" page_size="0x200_000" />
 
+    <memory_region name="mr_access_rights_data"     size="0x1000" page_size="0x1000" />
+    <memory_region name="mr_trusted_loader_data"    size="0x1000" page_size="0x1000" />
+    <memory_region name="mr_trusted_loader_context" size="0x1000" page_size="0x1000" />
+
     <template name="pd_tem" priority="100">
         <program_image path="template.elf" />
         <ioport id="0" addr="0x3f8" size="8" setvar_id="com1_ioport_id" setvar_addr="com1_ioport_addr"/>
@@ -21,6 +25,10 @@
         <map mr="mr_client_payload" vaddr="0x50000000" perms="rw" cached="true" />
         <map mr="mr_trampoline"     vaddr="0x30000000" perms="rw" cached="true" />
         <map mr="mr_trusted_loader" vaddr="0x10000000" perms="rw" cached="true" />
+
+        <map mr="mr_access_rights_data"     vaddr="0xff8f000" perms="rw" cached="true" />
+        <map mr="mr_trusted_loader_data"    vaddr="0xffcf000" perms="rw" cached="true" />
+        <map mr="mr_trusted_loader_context" vaddr="0xff4f000" perms="rw" cached="true" />
         
         <protection_domain name="pd_dyn" priority="253" id="15">
             <map mr="mr_client_payload"  vaddr="0x2000000" perms="rw" cached="true" />
@@ -32,12 +40,15 @@
             <map mr="mr_trampoline_stack" vaddr="0x00FFFDFF000" perms="rw" cached="true" />
             <map mr="mr_working_stack"    vaddr="0x00FFFBFF000" perms="rw" cached="true" />
 
+            <map mr="mr_access_rights_data"     vaddr="0xA01000" perms="rw" cached="true" />
+            <map mr="mr_trusted_loader_data"    vaddr="0xA00000" perms="rw" cached="true" />
+            <map mr="mr_trusted_loader_context" vaddr="0xE00000" perms="rw" cached="true" />
         </protection_domain>
     </template>
 
-    <channel optional="true">
+    <!-- channel optional="true">
         <end pd="pd_tem" id="4" />
         <end pd="pd_dyn" id="6" />
-    </channel>
+    </channel -->
 
 </system>

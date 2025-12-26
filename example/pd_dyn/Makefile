@@ -43,7 +43,7 @@ LIBEXTELF_SRC_DIR := $(CURDIR)/extelf
 include $(LIBTSLDR_SRC_DIR)/Makefile
 include $(LIBEXTELF_SRC_DIR)/Makefile
 
-IMAGES := template.elf protocon.elf
+IMAGES := template.elf protocon.elf client.elf trampoline.elf
 CFLAGS := -nostdlib -ffreestanding -g3 -O3 \
 			-I$(BOARD_DIR)/include $(CFLAGS_ARCH) \
 			-I$(LIBEXTELF_SRC_DIR)/include \
@@ -75,9 +75,24 @@ $(BUILD_DIR)/protocon.o: protocon.c Makefile
 $(BUILD_DIR)/protocon.elf: $(BUILD_DIR)/protocon.o $(LIBTSLDR) ${LIBEXTELF}
 	$(LD) $(LDFLAGS) --defsym __sel4_ipc_buffer=0x100000 $^ $(LIBS) -o $@
 
-$(PACKAGE_OBJS): package.S $(BUILD_DIR)/protocon.elf
+$(BUILD_DIR)/client.o: client.c Makefile
+	$(CC) -c $(CFLAGS) -Wall -Wno-unused-function -Werror $< -o $@
+
+$(BUILD_DIR)/client.elf: $(BUILD_DIR)/client.o
+	$(LD) $(LDFLAGS) -Ttext=0x2800000 $^ $(LIBS) -o $@
+
+$(BUILD_DIR)/trampoline.o: trampoline.c Makefile
+	$(CC) -c $(CFLAGS) -Wall -Wno-unused-function -Werror $< -o $@
+
+$(BUILD_DIR)/trampoline.elf: $(BUILD_DIR)/trampoline.o $(LIBEXTELF)
+	$(LD) $(LDFLAGS) -Ttext=0x1800000 $^ $(LIBS) -o $@
+
+$(PACKAGE_OBJS): package.S $(BUILD_DIR)/protocon.elf \
+				 $(BUILD_DIR)/client.elf $(BUILD_DIR)/trampoline.elf
 	$(CC) -c -g3 -x assembler-with-cpp \
 		-DLOADER_PATH=\"$(BUILD_DIR)/protocon.elf\" \
+		-DPAYLOAD_PATH=\"$(BUILD_DIR)/client.elf\" \
+		-DTRAMPOLINE_PATH=\"$(BUILD_DIR)/trampoline.elf\" \
 		package.S -o $@
 
 $(KERNEL) $(KERNEL_32B) $(INITIAL_TASK): $(addprefix $(BUILD_DIR)/, $(IMAGES)) pd_dyn.system
