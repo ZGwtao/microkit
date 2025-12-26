@@ -81,11 +81,11 @@ typedef struct {
     // the type of this acg
     uint8_t grp_type;
     // channels
-    uint8_t channels[8];
+    uint8_t channels[4];
     // irqs
-    uint8_t irqs[8];
+    uint8_t irqs[4];
     // mappings
-    StrippedMapping mappings[16];
+    StrippedMapping mappings[4];
     // data_path
     char data_path[64];
 } acgrp_t;
@@ -96,14 +96,14 @@ typedef struct {
     // number of available acgrp in the array
     uint8_t grp_num;
     // array of acgroups
-    acgrp_t array[32];
+    acgrp_t array[16];
 } acgrp_array_t;
 
 typedef struct {
     // overall length of this region
     size_t len;
     // list of acgrp arrays
-    acgrp_array_t list[32];
+    acgrp_array_t list[16];
 } acgrp_arr_list_t;
 
 
