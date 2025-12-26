@@ -256,7 +256,12 @@ pub fn patch_symbols_template_pd(
                     attrs: map.attrs,
                 }
             }
+
+            // We can use this field to tell the trusted loader
+            // that this child PD has optional resources
+            spec_trusted_loader.trusted_loader_md_array[child_idx].system_hash = 0xffff;
             spec_trusted_loader.avail_trusted_loader += 1;
+
         } 
 
         for (curr_idx, c) in system.protection_domains
