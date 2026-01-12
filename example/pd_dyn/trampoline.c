@@ -20,7 +20,7 @@ void init(void)
     uintptr_t tsldr_metadata    = 0xA00000;
     uintptr_t tsldr_program     = 0x200000;
     uintptr_t tsldr_context     = 0xE00000;
-    uintptr_t tsldr_stack_bottom        = 0x0FFFFFFF000;
+    //uintptr_t tsldr_stack_bottom        = 0x0FFFFFFF000;
     uintptr_t container_stack_bottom    = 0x00FFFBFF000;
     uintptr_t container_stack_top       = 0x00FFFC00000;
     uintptr_t client_elf = 0x2000000;
@@ -28,7 +28,7 @@ void init(void)
     microkit_dbg_puts("[@trampoline] Entry of trampoline.\n");
 
     /* say goodbye to the old stack */
-    custom_memset((void *)tsldr_stack_bottom, 0, 0x1000);
+    //custom_memset((void *)tsldr_stack_bottom, 0, 0x1000);
 
     /* clean up trusted loader metadata... */
     custom_memset((void *)tsldr_metadata, 0, 0x1000);

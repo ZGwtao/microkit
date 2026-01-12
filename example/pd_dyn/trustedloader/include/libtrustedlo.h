@@ -131,7 +131,7 @@ typedef struct {
 #define CNODE_IRQ_BASE_CAP      (CNODE_PPC_BASE_CAP + 64)
 
 // Dynamic PD can use the same slot to keep its own CNode cap like a template PD
-#define CNODE_SELF_CAP          (443)
+#define CNODE_SELF_CAP          (506)
 // Trusted loader should place the cap for BGD and VSpace to the following slot
 #define CNODE_BACKGROUND_CAP    (CNODE_SELF_CAP + 1)
 #define CNODE_VSPACE_CAP        (CNODE_BACKGROUND_CAP + 1)

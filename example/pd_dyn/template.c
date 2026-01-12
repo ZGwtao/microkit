@@ -58,11 +58,11 @@ static inline void serial_puts(const char *s)
 
 void init(void)
 {
-    serial_puts("hello!\n");
+    //serial_puts("hello!\n");
 
     tsldr_md_array_t *ptr_spec_trusted_loader = (tsldr_md_array_t *)microkit_template_spec;
-    microkit_dbg_printf("%d\n", ptr_spec_trusted_loader->avails);
-    microkit_dbg_printf("%s\n", microkit_name);
+    microkit_dbg_printf(PROGNAME "%d\n", ptr_spec_trusted_loader->avails);
+    microkit_dbg_printf(PROGNAME "%s\n", microkit_name);
 
     int num_assert = 0;
     for (int i = 0; i < 16; ++i) {
@@ -125,6 +125,17 @@ seL4_Bool fault(microkit_child child, microkit_msginfo msginfo, microkit_msginfo
             custom_memcpy((void*)((uintptr_t)image_trampoline), (char*)_trampoline, _trampoline_end - _trampoline);
             microkit_dbg_printf(PROGNAME "loaded trampoline payload successfully\n");
 
+            seL4_Error err;
+            err = seL4_CNode_Copy(15 + 458, CNODE_SELF_CAP, PD_CAP_BITS, CNODE_SELF_CAP, 15 + 458, PD_CAP_BITS, seL4_AllRights);
+            if (err != seL4_NoError) {
+                microkit_dbg_printf(PROGNAME "???\n");
+                microkit_internal_crash(-1);
+            }
+            err = seL4_CNode_Copy(15 + 458, CNODE_BACKGROUND_CAP, PD_CAP_BITS, CNODE_SELF_CAP, 15 + 474, PD_CAP_BITS, seL4_AllRights);
+            if (err != seL4_NoError) {
+                microkit_dbg_printf(PROGNAME "???\n");
+                microkit_internal_crash(-1);
+            }
             // FIXME: do sanity checks when the dynamic PD faults on 0x0
             microkit_pd_restart(child, ehdr->e_entry);
             return seL4_False;

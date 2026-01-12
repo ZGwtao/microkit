@@ -237,12 +237,18 @@ void tsldr_init_metadata(tsldr_md_array_t *array, size_t id)
         microkit_dbg_printf(LIB_NAME_MACRO "Invalid array pointer given\n");
         return;
     }
-    if (id >= 64 || id < 0) {
+    if (id >= 16 || id < 0) {
         microkit_dbg_printf(LIB_NAME_MACRO "Invalid template PD child ID given: %d\n", id);
         return;
     }
     tsldr_md_t *target_md = &array->md_array[id];
     //microkit_dbg_printf(LIB_NAME_MACRO "%d %d\n", target_md->child_id, target_md->system_hash);
+    if (target_md->child_id != id) {
+        microkit_dbg_printf(LIB_NAME_MACRO "Invalid template PD child ID metadata given: %d\n",
+            target_md->child_id);
+        microkit_internal_crash(-1);
+        return;
+    }
 
     /* initialise trusted loader metadata */
     custom_memset((tsldr_md_t *)tsldr_metadata, 0, sizeof(tsldr_md_t));
@@ -342,6 +348,9 @@ void tsldr_remove_caps(trusted_loader_t *loader, bool self_loading)
     }
 
     if (self_loading) {
+        //seL4_Signal(CNODE_SELF_CAP);
+        //seL4_Signal(CNODE_BACKGROUND_CAP);
+        //seL4_Signal(CNODE_VSPACE_CAP);
         error = seL4_CNode_Move(
             CNODE_SELF_CAP, CNODE_VSPACE_CAP, PD_CAP_BITS,
             CNODE_BACKGROUND_CAP, BACKGROUND_VSPACE_CAP, PD_CAP_BITS);
