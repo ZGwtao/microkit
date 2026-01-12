@@ -94,7 +94,7 @@ const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
 // Valid only if the PD is template PD
 // Maximum 16 dynamic PD (child) per template PD (parent)
 // (working) CNode cap for the child PD
-const PD_BASE_PD_CND_CAP: u64 = PD_BASE_IOPORT_CAP + 16;
+const PD_BASE_PD_CND_CAP: u64 = PD_BASE_IOPORT_CAP + 64;
 // Background CNode cap for the child PD
 const PD_BASE_PD_BGD_CAP: u64 = PD_BASE_PD_CND_CAP + 16;
 // (working) VSpace cap for the child PD
@@ -103,7 +103,7 @@ const PD_BASE_PD_VSP_CAP: u64 = PD_BASE_PD_BGD_CAP + 16;
 // which requires the access to the working CNode of the template PD
 // (in return, the template PD must be trusted)
 // (this works for dynamic PD too, but we don't grant it for them in here)
-const PD_BASE_PD_SELF_CND_CAP: u64 = PD_BASE_PD_VSP_CAP + 1;
+const PD_BASE_PD_SELF_CND_CAP: u64 = PD_BASE_PD_VSP_CAP + 16;
 // As a dynamic PD, it should be able to access its BGD for self loading
 // but we don't grant access for them in here
 //const PD_BASE_PD_SELF_BGD_CAP: u64 = PD_BASE_PD_SELF_CND_CAP + 1;
