@@ -171,7 +171,7 @@
             <map mr="ppc_low_to_hi_same_core__results" vaddr="0x30001000" setvar_vaddr="results" />
         </protection_domain>
 
-        <protection_domain name="ppc_low_to_hi_same_core__high" priority="203" cpu="0">
+        <protection_domain name="ppc_low_to_hi_same_core__high" priority="203" cpu="0" passive="true">
             <program_image path="ppc_low_to_hi__high.elf" />
 
             <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />

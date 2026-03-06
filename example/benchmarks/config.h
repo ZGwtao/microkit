@@ -1,7 +1,7 @@
 #pragma once
 
 #define NUM_WARMUP 1000
-#define NUM_SAMPLES 100000
+#define NUM_SAMPLES 4000000
 
 /* These numbers are used as the channels from the manager POV.
  * If it is defined as 0, it is disabled.
