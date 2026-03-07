@@ -1416,19 +1416,20 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
 
         let pd_a = &pds[&ch.end_a.pd];
         let pd_b = &pds[&ch.end_b.pd];
-        if ch.end_a.pp && pd_a.priority >= pd_b.priority {
-            return Err(format!(
-                "Error: PPCs must be to protection domains of strictly higher priorities; \
-                        channel with PPC exists from pd {} (priority: {}) to pd {} (priority: {})",
-                pd_a.name, pd_a.priority, pd_b.name, pd_b.priority
-            ));
-        } else if ch.end_b.pp && pd_b.priority >= pd_a.priority {
-            return Err(format!(
-                "Error: PPCs must be to protection domains of strictly higher priorities; \
-                        channel with PPC exists from pd {} (priority: {}) to pd {} (priority: {})",
-                pd_b.name, pd_b.priority, pd_a.name, pd_a.priority
-            ));
-        } else if ch.end_a.pp && pd_a.cpu != pd_b.cpu {
+        //if ch.end_a.pp && pd_a.priority >= pd_b.priority {
+        //    return Err(format!(
+        //        "Error: PPCs must be to protection domains of strictly higher priorities; \
+        //                channel with PPC exists from pd {} (priority: {}) to pd {} (priority: {})",
+        //        pd_a.name, pd_a.priority, pd_b.name, pd_b.priority
+        //    ));
+        //} else if ch.end_b.pp && pd_b.priority >= pd_a.priority {
+        //    return Err(format!(
+        //        "Error: PPCs must be to protection domains of strictly higher priorities; \
+        //                channel with PPC exists from pd {} (priority: {}) to pd {} (priority: {})",
+        //        pd_b.name, pd_b.priority, pd_a.name, pd_a.priority
+        //    ));
+        //} else
+        if ch.end_a.pp && pd_a.cpu != pd_b.cpu {
             return Err(format!(
                 "Error: PPCs are not allowed across cores on multikernels; \
                         channel with PPC exists from pd {} ({}) to pd {} ({})",

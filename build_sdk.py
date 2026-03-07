@@ -371,7 +371,8 @@ SUPPORTED_CONFIGS = (
         kernel_options={
             "KernelDebugBuild": False,
             "KernelVerificationBuild": False,
-            "KernelBenchmarks": "track_utilisation"
+            "KernelBenchmarks": "track_utilisation",
+            "HardwareDebugAPI": False
         },
         kernel_options_arch={
             KernelArch.AARCH64: {
