@@ -47,7 +47,10 @@ IMAGES := manager.elf \
   signal_low_to_hi_same_core__high.elf signal_low_to_hi_same_core__low.elf \
   signal_hi_to_low__high.elf signal_hi_to_low__low.elf \
   signal_2way_low_to_hi__low.elf signal_2way_low_to_hi__mid.elf signal_2way_low_to_hi__high.elf \
-  ppc_low_to_hi__high.elf ppc_low_to_hi__low.elf
+  ppc_low_to_hi__high.elf ppc_low_to_hi__low.elf \
+  ppc_local_client.elf ppc_local_server.elf \
+  ppc_interference.elf \
+  ppc_remote_client.elf ppc_remote_server.elf
 
 CFLAGS := -MMD -MP -nostdlib -ffreestanding -g -O2 -Wall -Wno-unused-function -I$(BOARD_DIR)/include $(CFLAGS_ARCH)
 LDFLAGS := -L$(BOARD_DIR)/lib
