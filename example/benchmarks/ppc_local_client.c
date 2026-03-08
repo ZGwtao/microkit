@@ -28,8 +28,6 @@ void init(void)
     tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
 
     print("received signal from interference\n");
-    microkit_notify(1);
-    print("sent notification back to interference\n");
 
     RECORDING_BEGIN();
 
