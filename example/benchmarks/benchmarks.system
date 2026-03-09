@@ -17,19 +17,34 @@
 
     <!-- Benchmark 6: low to high, same core, ppc. -->
     <memory_region name="ppc_passive_server_6__results" size="0x1000" />
+    <memory_region name="timer" size="0x10_000" phys_addr="0xffd0f000" />
 
-    <protection_domain name="ppc_passive_server_6__client" priority="103" cpu="0">
-        <program_image path="ppc_low_to_hi__low.elf" />
+    <protection_domain name="ppc_timer" priority="105" cpu="0" >
+        <program_image path="ppc_interference.elf" />
+
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+        <map mr="ppc_passive_server_6__results" vaddr="0x30001000" setvar_vaddr="results" />
+        <map mr="timer" vaddr="0x2_000_000" perms="rw" cached="false" setvar_vaddr="timer_regs" />
+        <irq irq="42" id="5" trigger="edge" />
+    </protection_domain>
+
+    <protection_domain name="ppc_passive_server_6__client" priority="103" cpu="0" >
+        <program_image path="ppc_local_client.elf" />
 
         <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
         <map mr="ppc_passive_server_6__results" vaddr="0x30001000" setvar_vaddr="results" />
     </protection_domain>
 
     <protection_domain name="ppc_passive_server_6__server" priority="203" cpu="0" passive="true">
-        <program_image path="ppc_low_to_hi__high.elf" />
+        <program_image path="ppc_local_server.elf" />
 
         <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
     </protection_domain>
+
+    <channel>
+        <end pd="ppc_timer" id="4" />
+        <end pd="ppc_passive_server_6__client" id="4" />
+    </channel>
 
     <channel>
         <end pd="ppc_passive_server_6__server" id="2" />
@@ -37,6 +52,7 @@
     </channel>
 
     <!-- Benchmark 7: low to high, interference, ppc. -->
+<!--
     <memory_region name="ppc_passive_server_7__results" size="0x1000" />
 
     <protection_domain name="ppc_passive_server_7__client" priority="103" cpu="0">
@@ -56,8 +72,9 @@
         <end pd="ppc_passive_server_7__server" id="2" />
         <end pd="ppc_passive_server_7__client" id="2" pp="true" />
     </channel>
-
+-->
     <!-- Benchmark 8: low to high, interference, ppc. -->
+<!--
     <memory_region name="ppc_passive_server_8__results" size="0x1000" />
 
     <protection_domain name="ppc_passive_server_8__client" priority="103" cpu="0">
@@ -77,8 +94,10 @@
         <end pd="ppc_passive_server_8__server" id="2" />
         <end pd="ppc_passive_server_8__client" id="2" pp="true" />
     </channel>
+-->
 
     <!-- Benchmark 9: low to high, interference, ppc. -->
+<!--
     <memory_region name="ppc_passive_server_9__results" size="0x1000" />
 
     <protection_domain name="ppc_passive_server_9__client" priority="103" cpu="0">
@@ -98,8 +117,10 @@
         <end pd="ppc_passive_server_9__server" id="2" />
         <end pd="ppc_passive_server_9__client" id="2" pp="true" />
     </channel>
+-->
 
     <!-- Benchmark 10: low to high, interference, ppc. -->
+<!--
     <memory_region name="ppc_passive_server_10__results" size="0x1000" />
 
     <protection_domain name="ppc_passive_server_10__client" priority="103" cpu="0">
@@ -119,23 +140,26 @@
         <end pd="ppc_passive_server_10__server" id="2" />
         <end pd="ppc_passive_server_10__client" id="2" pp="true" />
     </channel>
-
+-->
     <!-- lowest priority. it should never interfere -->
     <protection_domain name="manager" priority="0" cpu="0">
         <program_image path="manager.elf" />
         <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
         <map mr="ppc_passive_server_6__results" vaddr="0x30001000" setvar_vaddr="results_base" />
+<!--
         <map mr="ppc_passive_server_7__results" vaddr="0x30002000" />
         <map mr="ppc_passive_server_8__results" vaddr="0x30003000" />
         <map mr="ppc_passive_server_9__results" vaddr="0x30004000" />
         <map mr="ppc_passive_server_10__results" vaddr="0x30005000" />
+-->
     </protection_domain>
 
     <channel>
         <end pd="manager" id=str(BENCHMARK_CH__PPC_PASSIVE_SERVER_6) />
-        <end pd="ppc_passive_server_6__client" id="0" />
+        <end pd="ppc_timer" id="0" />
     </channel>
 
+<!--
     <channel>
         <end pd="manager" id=str(BENCHMARK_CH__PPC_PASSIVE_SERVER_7) />
         <end pd="ppc_passive_server_7__client" id="0" />
@@ -155,5 +179,6 @@
         <end pd="manager" id=str(BENCHMARK_CH__PPC_PASSIVE_SERVER_10) />
         <end pd="ppc_passive_server_10__client" id="0" />
     </channel>
+-->
 
 </system>

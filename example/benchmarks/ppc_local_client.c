@@ -21,40 +21,26 @@ void init(void)
     seL4_MessageInfo_t tag UNUSED;
     cycles_t start;
     cycles_t end;
-
-    print("hello world\n");
+    result_t *r = (result_t *)results;
+    seL4_Word *sum = &r->sum;
+    r->sum = 0;
 
     /* wait for start notification */
     tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
-
-    print("received signal from interference\n");
-
-    RECORDING_BEGIN();
+    print("received signal from timer\n");
 
     for (size_t i = 0; i < NUM_WARMUP; i++) {
-        start = pmu_read_cycles();
         seL4_Call(BASE_ENDPOINT_CAP + PPC_HI_LO_CHANNEL, microkit_msginfo_new(0, 0));
-        end = pmu_read_cycles();
-
-        asm volatile("" :: "r"(start), "r"(end));
     }
 
-    for (size_t i = 0; i < NUM_SAMPLES; i++) {
+    print("finished warmup\n");
 
-        /* ==== Benchmark critical ==== */
-        {
-            start = pmu_read_cycles();
-            /* Call high (does not switch threads) */
-            seL4_Call(BASE_ENDPOINT_CAP + PPC_HI_LO_CHANNEL, microkit_msginfo_new(0, 0));
-            end = pmu_read_cycles();
-        }
-
-        RECORDING_ADD_SAMPLE(start, end);
+    microkit_notify(4);
+    tag = seL4_Recv(INPUT_CAP, &badge, REPLY_CAP);
+    for (;;) {
+        seL4_Call(BASE_ENDPOINT_CAP + PPC_HI_LO_CHANNEL, microkit_msginfo_new(0, 0));
+        *sum += 1;
     }
-
-    RECORDING_END(results);
-
-    microkit_notify(1);
 }
 
 DECLARE_SUBVERTED_MICROKIT()
