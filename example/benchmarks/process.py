@@ -16,12 +16,18 @@ def process(results: csv.DictReader):
 
     for row in results:
         n = int(row["runs"], 16)
+        # print("n: ", n)
         sum_x = int(row["sum"], 16)
+        # print("sum_x: ", sum_x)
         sum_x_squared = int(row["sum_squared"], 16)
+        # print("sum_x_sq: ", sum_x_squared)
         mean = sum_x / n
+        # print("mean: ", mean)
         # sigma² = ( sum(x^2) - 2m*sum(x) + n*m^2 ) / n
-        variance = ( sum_x_squared - 2 * mean * sum_x + n* (mean ** 2) ) / n
+        variance = 0 # ( sum_x_squared - 2 * mean * sum_x + n* (mean ** 2) ) / n
+        # print("variance: ", variance)
         stddev = math.sqrt(variance)
+        # print("stddev: ", stddev)
 
         writer.writerow({
             "name": row["name"],

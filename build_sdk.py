@@ -352,8 +352,14 @@ SUPPORTED_CONFIGS = (
     ConfigInfo(
         name="release",
         debug=False,
-        kernel_options={},
-        kernel_options_arch={},
+        kernel_options={
+            "HardwareDebugAPI": False
+        },
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                "KernelArmExportPMUUser": True,
+            },
+        },
     ),
     ConfigInfo(
         name="debug",

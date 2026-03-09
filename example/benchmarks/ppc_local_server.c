@@ -34,7 +34,7 @@ microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)
     /* To make this simpler this literally just always replies */
     while (true) {
         /* We don't do any measurements here */
-        tag = seL4_ReplyRecv(BASE_ENDPOINT_CAP + PPC_HI_LO_CHANNEL, reply_tag, &badge, REPLY_CAP);
+        tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
     }
     return seL4_MessageInfo_new(0, 0, 0, 0);
 }

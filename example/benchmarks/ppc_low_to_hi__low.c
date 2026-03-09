@@ -11,7 +11,7 @@
 #include "benchmark.h"
 #include "config.h"
 
-#define PPC_HI_LO_CHANNEL 1
+#define PPC_HI_LO_CHANNEL 2
 
 uintptr_t results;
 
@@ -37,18 +37,18 @@ void init(void)
         asm volatile("" :: "r"(start), "r"(end));
     }
 
+    start = pmu_read_cycles();
     for (size_t i = 0; i < NUM_SAMPLES; i++) {
 
         /* ==== Benchmark critical ==== */
         {
-            start = pmu_read_cycles();
             /* Call high (does not switch threads) */
             seL4_Call(BASE_ENDPOINT_CAP + PPC_HI_LO_CHANNEL, microkit_msginfo_new(0, 0));
-            end = pmu_read_cycles();
         }
 
-        RECORDING_ADD_SAMPLE(start, end);
     }
+    end = pmu_read_cycles();
+    RECORDING_ADD_SAMPLE(start, end);
 
     RECORDING_END(results);
 

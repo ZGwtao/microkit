@@ -32,7 +32,7 @@
   asm volatile("" ::: "memory");                                               \
   sample = (end - start);                                                      \
   sum += sample;                                                               \
-  sum_squared += sample * sample;                                              \
+  sum_squared += (sample / NUM_SAMPLES) * sample;                                              \
   min = (sample < min) ? sample : min;                                         \
   max = (sample > max) ? sample : max;
 

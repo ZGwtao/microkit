@@ -2930,7 +2930,7 @@ fn build_system(
 
     // In the benchmark configuration, we allow PDs to access their own TCB.
     // This is necessary for accessing kernel's benchmark API.
-    if config.benchmark {
+    //if config.benchmark {
         let mut tcb_cap_copy_invocation = Invocation::new(
             config,
             InvocationArgs::CnodeCopy {
@@ -2956,7 +2956,7 @@ fn build_system(
             },
         );
         system_invocations.push(tcb_cap_copy_invocation);
-    }
+    //}
 
     // Set VSpace and CSpace
     let mut pd_set_space_invocation = Invocation::new(

@@ -15,271 +15,145 @@
 
     <!-- NB: To make serial easy, ensure distinct priorities. -->
 
-    <!-- Benchmark 1: basic comparison with existing seL4 performance tests -->
-        <memory_region name="signal_low_to_hi_same_core__shared" size="0x1000" />
-        <memory_region name="signal_low_to_hi_same_core__results" size="0x1000" />
-
-        <protection_domain name="signal_low_to_hi_same_core__low" priority="101" cpu="0">
-            <program_image path="signal_low_to_hi_same_core__low.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="signal_low_to_hi_same_core__results" vaddr="0x30001000" setvar_vaddr="results" />
-            <map mr="signal_low_to_hi_same_core__shared"  vaddr="0x30010000" setvar_vaddr="shared" />
-        </protection_domain>
-
-        <protection_domain name="signal_low_to_hi_same_core__high" priority="201" cpu="0">
-            <program_image path="signal_low_to_hi_same_core__high.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="signal_low_to_hi_same_core__shared" vaddr="0x30010000" setvar_vaddr="shared" />
-        </protection_domain>
-
-        <channel>
-            <end pd="signal_low_to_hi_same_core__low" id="1" />
-            <end pd="signal_low_to_hi_same_core__high" id="1" />
-        </channel>
-
-    <!-- Benchmark 2: basic comparison with existing seL4 performance tests -->
-        <memory_region name="signal_hi_to_low_same_core__results" size="0x1000" />
-
-        <protection_domain name="signal_hi_to_low_same_core__high" priority="202" cpu="0">
-            <program_image path="signal_hi_to_low__high.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="signal_hi_to_low_same_core__results" vaddr="0x30001000" setvar_vaddr="results" />
-        </protection_domain>
-
-        <protection_domain name="signal_hi_to_low_same_core__low" priority="102" cpu="0">
-            <program_image path="signal_hi_to_low__low.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-        </protection_domain>
-
-        <channel>
-            <end pd="signal_hi_to_low_same_core__low" id="1" />
-            <end pd="signal_hi_to_low_same_core__high" id="1" />
-        </channel>
-
-    <!-- Benchmark 3: new test, cross core high->low -->
-        <memory_region name="signal_hi_to_low_cross_core__results" size="0x1000" />
-
-        <protection_domain name="signal_hi_to_low_cross_core__high" priority="203" cpu="0">
-            <program_image path="signal_hi_to_low__high.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="signal_hi_to_low_cross_core__results" vaddr="0x30001000" setvar_vaddr="results" />
-        </protection_domain>
-
-        <protection_domain name="signal_hi_to_low_cross_core__low" priority="103" cpu="1">
-            <program_image path="signal_hi_to_low__low.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-        </protection_domain>
-
-        <channel>
-            <end pd="signal_hi_to_low_cross_core__low" id="1" />
-            <end pd="signal_hi_to_low_cross_core__high" id="1" />
-        </channel>
-
-    <!-- Benchmark 4: 2way low to high test-->
-        <memory_region name="signal_2way_low_to_hi_same_core__results" size="0x1000" />
-        <memory_region name="signal_2way_low_to_hi_same_core__shared" size="0x1000" />
-
-        <protection_domain name="signal_2way_low_to_hi_same_core__low" priority="104" cpu="0">
-            <program_image path="signal_2way_low_to_hi__low.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="signal_2way_low_to_hi_same_core__results" vaddr="0x30001000" setvar_vaddr="results" />
-            <map mr="signal_2way_low_to_hi_same_core__shared"  vaddr="0x30010000" setvar_vaddr="shared" />
-        </protection_domain>
-
-        <protection_domain name="signal_2way_low_to_hi_same_core__mid" priority="154" cpu="0">
-            <program_image path="signal_2way_low_to_hi__mid.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-        </protection_domain>
-
-        <protection_domain name="signal_2way_low_to_hi_same_core__high" priority="204" cpu="0">
-            <program_image path="signal_2way_low_to_hi__high.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="signal_2way_low_to_hi_same_core__shared" vaddr="0x30010000" setvar_vaddr="shared" />
-        </protection_domain>
-
-        <channel>
-            <end pd="signal_2way_low_to_hi_same_core__low" id="1" />
-            <end pd="signal_2way_low_to_hi_same_core__mid" id="1" />
-        </channel>
-
-        <channel>
-            <end pd="signal_2way_low_to_hi_same_core__mid" id="2" />
-            <end pd="signal_2way_low_to_hi_same_core__high" id="2" />
-        </channel>
-
-        <channel>
-            <end pd="signal_2way_low_to_hi_same_core__high" id="3" />
-            <end pd="signal_2way_low_to_hi_same_core__low"  id="3" />
-        </channel>
-
-    <!-- Benchmark 5: 2way low to high test, cross core. -->
-        <memory_region name="signal_2way_low_to_hi_cross_core__results" size="0x1000" />
-        <memory_region name="signal_2way_low_to_hi_cross_core__shared" size="0x1000" />
-
-        <protection_domain name="signal_2way_low_to_hi_cross_core__low" priority="105" cpu="0">
-            <program_image path="signal_2way_low_to_hi__low.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="signal_2way_low_to_hi_cross_core__results" vaddr="0x30001000" setvar_vaddr="results" />
-            <map mr="signal_2way_low_to_hi_cross_core__shared"  vaddr="0x30010000" setvar_vaddr="shared" />
-        </protection_domain>
-
-        <protection_domain name="signal_2way_low_to_hi_cross_core__mid" priority="155" cpu="1">
-            <program_image path="signal_2way_low_to_hi__mid.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-        </protection_domain>
-
-        <protection_domain name="signal_2way_low_to_hi_cross_core__high" priority="205" cpu="0">
-            <program_image path="signal_2way_low_to_hi__high.elf" />
-
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="signal_2way_low_to_hi_cross_core__shared" vaddr="0x30010000" setvar_vaddr="shared" />
-        </protection_domain>
-
-        <channel>
-            <end pd="signal_2way_low_to_hi_cross_core__low" id="1" />
-            <end pd="signal_2way_low_to_hi_cross_core__mid" id="1" />
-        </channel>
-
-        <channel>
-            <end pd="signal_2way_low_to_hi_cross_core__mid" id="2" />
-            <end pd="signal_2way_low_to_hi_cross_core__high" id="2" />
-        </channel>
-
-        <channel>
-            <end pd="signal_2way_low_to_hi_cross_core__high" id="3" />
-            <end pd="signal_2way_low_to_hi_cross_core__low"  id="3" />
-        </channel>
-
     <!-- Benchmark 6: low to high, same core, ppc. -->
-        <memory_region name="ppc_low_to_hi_same_core__results" size="0x1000" />
+    <memory_region name="ppc_passive_server_6__results" size="0x1000" />
 
-        <protection_domain name="ppc_low_to_hi_same_core__low" priority="103" cpu="0">
-            <program_image path="ppc_low_to_hi__low.elf" />
+    <protection_domain name="ppc_passive_server_6__client" priority="103" cpu="0">
+        <program_image path="ppc_low_to_hi__low.elf" />
 
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="ppc_low_to_hi_same_core__results" vaddr="0x30001000" setvar_vaddr="results" />
-        </protection_domain>
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+        <map mr="ppc_passive_server_6__results" vaddr="0x30001000" setvar_vaddr="results" />
+    </protection_domain>
 
-        <protection_domain name="ppc_low_to_hi_same_core__high" priority="203" cpu="0" passive="true">
-            <program_image path="ppc_low_to_hi__high.elf" />
+    <protection_domain name="ppc_passive_server_6__server" priority="203" cpu="0" passive="true">
+        <program_image path="ppc_low_to_hi__high.elf" />
 
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-        </protection_domain>
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+    </protection_domain>
 
-        <channel>
-            <end pd="ppc_low_to_hi_same_core__high" id="1" />
-            <end pd="ppc_low_to_hi_same_core__low" id="1" pp="true" />
-        </channel>
+    <channel>
+        <end pd="ppc_passive_server_6__server" id="2" />
+        <end pd="ppc_passive_server_6__client" id="2" pp="true" />
+    </channel>
 
     <!-- Benchmark 7: low to high, interference, ppc. -->
+    <memory_region name="ppc_passive_server_7__results" size="0x1000" />
 
-        <memory_region name="ppc_interference__results" size="0x1000" />
+    <protection_domain name="ppc_passive_server_7__client" priority="103" cpu="0">
+        <program_image path="ppc_low_to_hi__low.elf" />
 
-        <protection_domain name="ppc_interference" priority="105" cpu="0">
-            <program_image path="ppc_interference.elf" />
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+        <map mr="ppc_passive_server_7__results" vaddr="0x30001000" setvar_vaddr="results" />
+    </protection_domain>
 
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-        </protection_domain>
+    <protection_domain name="ppc_passive_server_7__server" priority="203" cpu="0" passive="true">
+        <program_image path="ppc_low_to_hi__high.elf" />
 
-        <protection_domain name="ppc_remote_client" priority="55" cpu="1">
-            <program_image path="ppc_remote_client.elf" />
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+    </protection_domain>
 
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-        </protection_domain>
+    <channel>
+        <end pd="ppc_passive_server_7__server" id="2" />
+        <end pd="ppc_passive_server_7__client" id="2" pp="true" />
+    </channel>
 
-        <protection_domain name="ppc_remote_server" priority="63" cpu="1" passive="true">
-            <program_image path="ppc_remote_server.elf" />
-        </protection_domain>
+    <!-- Benchmark 8: low to high, interference, ppc. -->
+    <memory_region name="ppc_passive_server_8__results" size="0x1000" />
 
-        <channel>
-            <end pd="ppc_remote_client" id="4" />
-            <end pd="ppc_interference" id="4" />
-        </channel>
+    <protection_domain name="ppc_passive_server_8__client" priority="103" cpu="0">
+        <program_image path="ppc_low_to_hi__low.elf" />
 
-        <channel>
-            <end pd="ppc_remote_client" id="2" />
-            <end pd="ppc_remote_server" id="2" pp="true" />
-        </channel>
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+        <map mr="ppc_passive_server_8__results" vaddr="0x30001000" setvar_vaddr="results" />
+    </protection_domain>
 
-        <protection_domain name="ppc_local_client" priority="103" cpu="0">
-            <program_image path="ppc_local_client.elf" />
+    <protection_domain name="ppc_passive_server_8__server" priority="203" cpu="0" passive="true">
+        <program_image path="ppc_low_to_hi__high.elf" />
 
-            <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-            <map mr="ppc_interference__results" vaddr="0x30001000" setvar_vaddr="results" />
-        </protection_domain>
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+    </protection_domain>
 
-        <protection_domain name="ppc_local_server" priority="203" cpu="0" passive="true">
-            <program_image path="ppc_local_server.elf" />
-        </protection_domain>
+    <channel>
+        <end pd="ppc_passive_server_8__server" id="2" />
+        <end pd="ppc_passive_server_8__client" id="2" pp="true" />
+    </channel>
 
-        <channel>
-            <end pd="ppc_local_client" id="1" />
-            <end pd="ppc_interference" id="1" />
-        </channel>
+    <!-- Benchmark 9: low to high, interference, ppc. -->
+    <memory_region name="ppc_passive_server_9__results" size="0x1000" />
 
-        <channel>
-            <end pd="ppc_local_client" id="2" />
-            <end pd="ppc_local_server" id="2" pp="true" />
-        </channel>
+    <protection_domain name="ppc_passive_server_9__client" priority="103" cpu="0">
+        <program_image path="ppc_low_to_hi__low.elf" />
 
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+        <map mr="ppc_passive_server_9__results" vaddr="0x30001000" setvar_vaddr="results" />
+    </protection_domain>
+
+    <protection_domain name="ppc_passive_server_9__server" priority="203" cpu="0" passive="true">
+        <program_image path="ppc_low_to_hi__high.elf" />
+
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+    </protection_domain>
+
+    <channel>
+        <end pd="ppc_passive_server_9__server" id="2" />
+        <end pd="ppc_passive_server_9__client" id="2" pp="true" />
+    </channel>
+
+    <!-- Benchmark 10: low to high, interference, ppc. -->
+    <memory_region name="ppc_passive_server_10__results" size="0x1000" />
+
+    <protection_domain name="ppc_passive_server_10__client" priority="103" cpu="0">
+        <program_image path="ppc_low_to_hi__low.elf" />
+
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+        <map mr="ppc_passive_server_10__results" vaddr="0x30001000" setvar_vaddr="results" />
+    </protection_domain>
+
+    <protection_domain name="ppc_passive_server_10__server" priority="203" cpu="0" passive="true">
+        <program_image path="ppc_low_to_hi__high.elf" />
+
+        <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
+    </protection_domain>
+
+    <channel>
+        <end pd="ppc_passive_server_10__server" id="2" />
+        <end pd="ppc_passive_server_10__client" id="2" pp="true" />
+    </channel>
 
     <!-- lowest priority. it should never interfere -->
     <protection_domain name="manager" priority="0" cpu="0">
         <program_image path="manager.elf" />
-
         <map mr="uart" vaddr="0x30000000" cached="false" setvar_vaddr="uart_base" />
-        <map mr="signal_low_to_hi_same_core__results" vaddr="0x30001000" setvar_vaddr="results_base" />
-        <map mr="signal_hi_to_low_same_core__results" vaddr="0x30002000" />
-        <map mr="signal_hi_to_low_cross_core__results" vaddr="0x30003000" />
-        <map mr="signal_2way_low_to_hi_same_core__results" vaddr="0x30004000" />
-        <map mr="signal_2way_low_to_hi_cross_core__results" vaddr="0x30005000" />
-        <map mr="ppc_low_to_hi_same_core__results" vaddr="0x30006000" />
-        <map mr="ppc_interference__results" vaddr="0x30007000" />
+        <map mr="ppc_passive_server_6__results" vaddr="0x30001000" setvar_vaddr="results_base" />
+        <map mr="ppc_passive_server_7__results" vaddr="0x30002000" />
+        <map mr="ppc_passive_server_8__results" vaddr="0x30003000" />
+        <map mr="ppc_passive_server_9__results" vaddr="0x30004000" />
+        <map mr="ppc_passive_server_10__results" vaddr="0x30005000" />
     </protection_domain>
 
     <channel>
-        <end pd="manager" id=str(BENCHMARK_CH__SIGNAL_SAME_CORE_LOW_HI) />
-        <end pd="signal_low_to_hi_same_core__low" id="0" />
+        <end pd="manager" id=str(BENCHMARK_CH__PPC_PASSIVE_SERVER_6) />
+        <end pd="ppc_passive_server_6__client" id="0" />
     </channel>
 
     <channel>
-        <end pd="manager" id=str(BENCHMARK_CH__SIGNAL_SAME_CORE_HI_LOW) />
-        <end pd="signal_hi_to_low_same_core__high" id="0" />
+        <end pd="manager" id=str(BENCHMARK_CH__PPC_PASSIVE_SERVER_7) />
+        <end pd="ppc_passive_server_7__client" id="0" />
     </channel>
 
     <channel>
-        <end pd="manager" id=str(BENCHMARK_CH__SIGNAL_CROSS_CORE_HI_LOW) />
-        <end pd="signal_hi_to_low_cross_core__high" id="0" />
+        <end pd="manager" id=str(BENCHMARK_CH__PPC_PASSIVE_SERVER_8) />
+        <end pd="ppc_passive_server_8__client" id="0" />
     </channel>
 
     <channel>
-        <end pd="manager" id=str(BENCHMARK_CH__SIGNAL_2WAY_SAME_CORE_LOW_HI) />
-        <end pd="signal_2way_low_to_hi_same_core__low" id="0" />
+        <end pd="manager" id=str(BENCHMARK_CH__PPC_PASSIVE_SERVER_9) />
+        <end pd="ppc_passive_server_9__client" id="0" />
     </channel>
 
     <channel>
-        <end pd="manager" id=str(BENCHMARK_CH__SIGNAL_2WAY_CROSS_CORE_LOW_HI) />
-        <end pd="signal_2way_low_to_hi_cross_core__low" id="0" />
+        <end pd="manager" id=str(BENCHMARK_CH__PPC_PASSIVE_SERVER_10) />
+        <end pd="ppc_passive_server_10__client" id="0" />
     </channel>
 
-    <channel>
-        <end pd="manager" id=str(BENCHMARK_CH__PPC_SAME_CORE_LOW_HI) />
-        <end pd="ppc_low_to_hi_same_core__low" id="0" />
-    </channel>
-
-    <channel>
-        <end pd="manager" id=str(BENCHMARK_CH__PPC_INTERFERENCE_LOW_HI) />
-        <end pd="ppc_interference" id="0" />
-    </channel>
 </system>

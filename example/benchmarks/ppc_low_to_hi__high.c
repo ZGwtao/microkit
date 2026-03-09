@@ -9,7 +9,7 @@
 
 #include "benchmark.h"
 
-#define PPC_HI_LO_CHANNEL 1
+#define PPC_HI_LO_CHANNEL 2
 
 void init(void)
 {
@@ -33,7 +33,7 @@ microkit_msginfo protected(microkit_channel ch, microkit_msginfo msginfo)
     seL4_MessageInfo_t reply_tag;
     /* To make this simpler this literally just always replies */
     while (true) {
-        /* We don't do any measurements here */
+        /* the reason we put the INPUT_CAP here is the call comes from it */
         tag = seL4_ReplyRecv(INPUT_CAP, reply_tag, &badge, REPLY_CAP);
     }
     return seL4_MessageInfo_new(0, 0, 0, 0);

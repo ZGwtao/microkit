@@ -21,13 +21,11 @@ typedef struct {
 } benchmark_t;
 
 static const benchmark_t benchmark_infos[] = {
-    { BENCHMARK_CH__SIGNAL_SAME_CORE_LOW_HI, "signal low to high same core" },
-    { BENCHMARK_CH__SIGNAL_SAME_CORE_HI_LOW, "signal high to low same core" },
-    { BENCHMARK_CH__SIGNAL_CROSS_CORE_HI_LOW, "signal high to low cross core" },
-    { BENCHMARK_CH__SIGNAL_2WAY_SAME_CORE_LOW_HI, "signal 2way low to high same core" },
-    { BENCHMARK_CH__SIGNAL_2WAY_CROSS_CORE_LOW_HI, "signal 2way low to high cross core" },
-    { BENCHMARK_CH__PPC_SAME_CORE_LOW_HI, "ppc low to high same core" },
-    { BENCHMARK_CH__PPC_INTERFERENCE_LOW_HI, "ppc interference" },
+    { BENCHMARK_CH__PPC_PASSIVE_SERVER_6,   "ppc passive server 6" },
+    { BENCHMARK_CH__PPC_PASSIVE_SERVER_7,   "ppc passive server 7" },
+    { BENCHMARK_CH__PPC_PASSIVE_SERVER_8,   "ppc passive server 8" },
+    { BENCHMARK_CH__PPC_PASSIVE_SERVER_9,   "ppc passive server 9" },
+    { BENCHMARK_CH__PPC_PASSIVE_SERVER_10,  "ppc passive server 10" },
 };
 
 static const size_t benchmark_infos_count = sizeof(benchmark_infos)/sizeof(benchmark_infos[0]);
