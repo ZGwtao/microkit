@@ -21,9 +21,9 @@ typedef struct {
 } benchmark_t;
 
 static const benchmark_t benchmark_infos[] = {
-    { BENCHMARK_CH__PPC_PASSIVE_SERVER_6,   "ppc passive server 6" },
-#if 0
     { BENCHMARK_CH__PPC_PASSIVE_SERVER_7,   "ppc passive server 7" },
+#if 0
+    { BENCHMARK_CH__PPC_PASSIVE_SERVER_6,   "ppc passive server 6" },
     { BENCHMARK_CH__PPC_PASSIVE_SERVER_8,   "ppc passive server 8" },
     { BENCHMARK_CH__PPC_PASSIVE_SERVER_9,   "ppc passive server 9" },
     { BENCHMARK_CH__PPC_PASSIVE_SERVER_10,  "ppc passive server 10" },
