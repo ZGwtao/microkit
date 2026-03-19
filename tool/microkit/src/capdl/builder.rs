@@ -96,27 +96,24 @@ const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
 // (working) CNode cap for the child PD
 const PD_BASE_PD_CND_CAP: u64 = PD_BASE_IOPORT_CAP + 64;
 // Background CNode cap for the child PD
-const PD_BASE_PD_BGD_CAP: u64 = PD_BASE_PD_CND_CAP + 16;
+const PD_BASE_PD_BKC_CAP: u64 = PD_BASE_PD_CND_CAP + 16;
 // (working) VSpace cap for the child PD
-const PD_BASE_PD_VSP_CAP: u64 = PD_BASE_PD_BGD_CAP + 16;
+const PD_BASE_PD_VSP_CAP: u64 = PD_BASE_PD_BKC_CAP + 16;
 // As a template PD, it runs a prologue for trusted loading
 // which requires the access to the working CNode of the template PD
 // (in return, the template PD must be trusted)
 // (this works for dynamic PD too, but we don't grant it for them in here)
 const PD_BASE_PD_SELF_CND_CAP: u64 = PD_BASE_PD_VSP_CAP + 16;
-// As a dynamic PD, it should be able to access its BGD for self loading
-// but we don't grant access for them in here
-//const PD_BASE_PD_SELF_BGD_CAP: u64 = PD_BASE_PD_SELF_CND_CAP + 1;
 
-// Where to find the working CNode from the background CNode
-const BGD_CSPACE_CAP_IDX: u64 = 8;
-// Where to find the working VSpace from the background CNode
-const BGD_VSPACE_CAP_IDX: u64 = 9;
+// Where to find the working CNode from the backup CNode
+const BKC_CSPACE_CAP_IDX: u64 = 8;
+// Where to find the working VSpace from the backup CNode
+const BKC_VSPACE_CAP_IDX: u64 = 9;
 // Where the optional capability lives ... 
-const BGD_CNODE_NOTIFICATION_CAP: u64 = 10;
-const BGD_CNODE_IRQ_CAP: u64 = BGD_CNODE_NOTIFICATION_CAP + 64;
-const BGD_CNODE_PPC_CAP: u64 = BGD_CNODE_IRQ_CAP + 64;
-const BGD_CNODE_MAPPING_CAP: u64 = BGD_CNODE_PPC_CAP + 64;
+const BKC_CNODE_NOTIFICATION_CAP: u64 = 10;
+const BKC_CNODE_IRQ_CAP: u64 = BKC_CNODE_NOTIFICATION_CAP + 64;
+const BKC_CNODE_PPC_CAP: u64 = BKC_CNODE_IRQ_CAP + 64;
+const BKC_CNODE_MAPPING_CAP: u64 = BKC_CNODE_PPC_CAP + 64;
 
 pub const PD_CAP_SIZE: u32 = 512;
 const PD_CAP_BITS: u8 = PD_CAP_SIZE.ilog2() as u8;
@@ -592,8 +589,8 @@ pub fn build_capdl_spec(
     let mut pd_id_to_cspace_id: HashMap<usize, ObjectId> = HashMap::new();
     let mut pd_id_to_ntfn_id: HashMap<usize, ObjectId> = HashMap::new();
     let mut pd_id_to_ep_id: HashMap<usize, ObjectId> = HashMap::new();
-    // and background CNode (BGD)
-    let mut pd_id_to_bgd_id: HashMap<usize, ObjectId> = HashMap::new();
+    // and backup CNode (BKC)
+    let mut pd_id_to_bkc_id: HashMap<usize, ObjectId> = HashMap::new();
 
     // Keep track of the global count of vCPU objects so we can bind them to the monitor for setting TCB name in debug config.
     // Only used on ARM and RISC-V as on x86-64 VMs share the same TCB as PD's which will have their TCB name set separately.
@@ -608,7 +605,7 @@ pub fn build_capdl_spec(
 
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
-        let mut caps_to_insert_to_pd_bgd: Vec<CapTableEntry> = Vec::new();
+        let mut caps_to_insert_to_pd_bkc: Vec<CapTableEntry> = Vec::new();
 
         let parent_idx_opt = system.protection_domains[pd_global_idx].parent;
         let is_dyn = parent_idx_opt
@@ -638,15 +635,15 @@ pub fn build_capdl_spec(
         ));
 
         if is_dyn == true {
-            // Allow background CNode to access the VSpace
-            caps_to_insert_to_pd_bgd.push(capdl_util_make_cte(
-                BGD_VSPACE_CAP_IDX as u32,
+            // Allow backup CNode to access the VSpace
+            caps_to_insert_to_pd_bkc.push(capdl_util_make_cte(
+                BKC_VSPACE_CAP_IDX as u32,
                 capdl_util_make_page_table_cap(pd_vspace_obj_id),
             ));
         }
 
         // Step 3-2: Map in all Memory Regions
-        let mut map_slot = BGD_CNODE_MAPPING_CAP;
+        let mut map_slot = BKC_CNODE_MAPPING_CAP;
         for map in pd.maps.iter() {
             let frames = mr_name_to_frames.get(&map.mr).unwrap();
             // MRs have frames of equal size so just use the first frame's page size.
@@ -680,14 +677,14 @@ pub fn build_capdl_spec(
                 page_size_bytes,
                 pd_vspace_obj_id,
                 frames,
-                &mut caps_to_insert_to_pd_bgd,
+                &mut caps_to_insert_to_pd_bkc,
                 map_slot as u32,
             );
-            // Update the mapping slot in BGD
+            // Update the mapping slot in BKC
             if map.optional {
                 pd.maps_opt.push(MemoryMapping {
                     vaddr: (map.vaddr),
-                    page: (map_slot - BGD_CNODE_MAPPING_CAP),
+                    page: (map_slot - BKC_CNODE_MAPPING_CAP),
                     number_of_pages: (frames.len() as u64),
                     page_size: (page_size_bytes),
                     rights: (0),
@@ -877,7 +874,7 @@ pub fn build_capdl_spec(
                     page_size_bytes,
                     vm_vspace_obj_id,
                     frames,
-                    &mut caps_to_insert_to_pd_bgd,
+                    &mut caps_to_insert_to_pd_bkc,
                     0, // FIXME
                 );
             }
@@ -1064,9 +1061,9 @@ pub fn build_capdl_spec(
 
         if let Some(parent_idx) = pd.parent {
             if is_dyn {
-                // Allow background CNode of the dynamic PD to access the VSpace of the same dynamic PD
-                caps_to_insert_to_pd_bgd.push(capdl_util_make_cte(
-                    BGD_CSPACE_CAP_IDX as u32,
+                // Allow backup CNode of the dynamic PD to access the VSpace of the same dynamic PD
+                caps_to_insert_to_pd_bkc.push(capdl_util_make_cte(
+                    BKC_CSPACE_CAP_IDX as u32,
                     capdl_util_make_page_table_cap(pd_cnode_obj_id),
                 ));
 
@@ -1081,13 +1078,13 @@ pub fn build_capdl_spec(
             }
         }
 
-        let bgd_cnode_obj_id = capdl_util_make_cnode_obj(
+        let bkc_cnode_obj_id = capdl_util_make_cnode_obj(
             &mut spec_container,
-            &(pd.name.clone() + "bgd"),
+            &(pd.name.clone() + "bkc"),
             PD_CAP_BITS,
-            caps_to_insert_to_pd_bgd
+            caps_to_insert_to_pd_bkc,
         );
-        let bgd_cnode_cap = capdl_util_make_cnode_cap(bgd_cnode_obj_id, 0, pd_guard_size as u8);
+        let bkc_cnode_cap = capdl_util_make_cnode_cap(bkc_cnode_obj_id, 0, pd_guard_size as u8);
         if let Some(parent_idx) = pd.parent {
             if is_dyn {
                 // Allow the parent PD to access the working CNode of the dynamic PD
@@ -1095,8 +1092,8 @@ pub fn build_capdl_spec(
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container, 
                     parent_cnode_id,
-                    (PD_BASE_PD_BGD_CAP + pd.id.unwrap()) as u32,
-                    bgd_cnode_cap
+                    (PD_BASE_PD_BKC_CAP + pd.id.unwrap()) as u32,
+                    bkc_cnode_cap
                 );
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container, 
@@ -1108,7 +1105,7 @@ pub fn build_capdl_spec(
         }
 
         pd_id_to_cspace_id.insert(pd_global_idx, pd_cnode_obj_id);
-        pd_id_to_bgd_id.insert(pd_global_idx, bgd_cnode_obj_id);
+        pd_id_to_bkc_id.insert(pd_global_idx, bkc_cnode_obj_id);
 
         // Step 3-14 Set the TCB parameters and all the various caps that we need to bind to this TCB.
         if let Object::Tcb(pd_tcb) = &mut spec_container
@@ -1164,9 +1161,9 @@ pub fn build_capdl_spec(
         let pd_b_cspace_id = *pd_id_to_cspace_id.get(&channel.end_b.pd).unwrap();
         let pd_a_ntfn_id = *pd_id_to_ntfn_id.get(&channel.end_a.pd).unwrap();
         let pd_b_ntfn_id = *pd_id_to_ntfn_id.get(&channel.end_b.pd).unwrap();
-        // Get background CNode if optional...
-        let pd_a_bgd_id = *pd_id_to_bgd_id.get(&channel.end_a.pd).unwrap();
-        let pd_b_bgd_id = *pd_id_to_bgd_id.get(&channel.end_b.pd).unwrap();
+        // Get backup CNode if optional...
+        let pd_a_bkc_id = *pd_id_to_bkc_id.get(&channel.end_a.pd).unwrap();
+        let pd_b_bkc_id = *pd_id_to_bkc_id.get(&channel.end_b.pd).unwrap();
 
         // We trust that the SDF parsing code have checked for duplicate IDs.
         if channel.end_a.notify {
@@ -1182,8 +1179,8 @@ pub fn build_capdl_spec(
             if channel.optional == true {
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container,
-                    pd_a_bgd_id,
-                    (BGD_CNODE_NOTIFICATION_CAP + channel.end_a.id) as u32,
+                    pd_a_bkc_id,
+                    (BKC_CNODE_NOTIFICATION_CAP + channel.end_a.id) as u32,
                     pd_a_ntfn_cap,
                 );
             }
@@ -1202,8 +1199,8 @@ pub fn build_capdl_spec(
             if channel.optional == true {
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container,
-                    pd_b_bgd_id,
-                    (BGD_CNODE_NOTIFICATION_CAP + channel.end_b.id) as u32,
+                    pd_b_bkc_id,
+                    (BKC_CNODE_NOTIFICATION_CAP + channel.end_b.id) as u32,
                     pd_b_ntfn_cap,
                 );
             }
@@ -1224,8 +1221,8 @@ pub fn build_capdl_spec(
             if channel.optional == true {
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container,
-                    pd_a_bgd_id,
-                    (BGD_CNODE_PPC_CAP + channel.end_a.id) as u32,
+                    pd_a_bkc_id,
+                    (BKC_CNODE_PPC_CAP + channel.end_a.id) as u32,
                     pd_a_ep_cap,
                 );
             }
@@ -1246,8 +1243,8 @@ pub fn build_capdl_spec(
             if channel.optional == true {
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container,
-                    pd_b_bgd_id,
-                    (BGD_CNODE_PPC_CAP + channel.end_b.id) as u32,
+                    pd_b_bkc_id,
+                    (BKC_CNODE_PPC_CAP + channel.end_b.id) as u32,
                     pd_b_ep_cap,
                 );
             }
