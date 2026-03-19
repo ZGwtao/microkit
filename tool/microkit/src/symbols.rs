@@ -188,15 +188,15 @@ pub fn patch_symbols(
     Ok(())
 }
 
-/// Patch all the required symbold in template PDs
-pub fn patch_symbols_template_pd(
+/// Patch all the required symbold in monitor PDs
+pub fn patch_symbols_monitor_pd(
     pd_elf_files: &mut [ElfFile],
     system: &SystemDescription,
 ) -> Result<(), String> {
-    for (tpl_idx, _) in system.protection_domains
+    for (mon_idx, _) in system.protection_domains
         .iter()
         .enumerate()
-        .filter(|(_, pd)| pd.is_template)
+        .filter(|(_, pd)| pd.is_monitor)
     {
         let mut spec_trusted_loader = TrustedLoaderMetadataArray::default();
         let mut monitor_os_services  = MonitorSvcDatabase::default();
@@ -204,9 +204,9 @@ pub fn patch_symbols_template_pd(
         for (curr_idx, c) in system.protection_domains
             .iter()
             .enumerate()
-            .filter(|(_, c)| c.parent == Some(tpl_idx))
+            .filter(|(_, c)| c.parent == Some(mon_idx))
         {
-            // ID of a child is local to the template PD namespace
+            // ID of a child is local to the monitor PD namespace
             // child_idx != curr_idx, the latter is the global idx of all PDs...
             let child_idx = c.id.unwrap() as usize;
             // Make sure the init function instantiate the spec correctly
@@ -267,7 +267,7 @@ pub fn patch_symbols_template_pd(
         for (curr_idx, c) in system.protection_domains
             .iter()
             .enumerate()
-            .filter(|(_, c)| c.parent == Some(tpl_idx))
+            .filter(|(_, c)| c.parent == Some(mon_idx))
         {
             let mut protocon_os_services = ProtoconSvcDatabase::default();
             protocon_os_services.pd_idx = curr_idx as u8;
@@ -302,7 +302,7 @@ pub fn patch_symbols_template_pd(
             monitor_os_services.num += 1;
         }
 
-        let elf_obj = &mut pd_elf_files[tpl_idx];
+        let elf_obj = &mut pd_elf_files[mon_idx];
         elf_obj
             .write_symbol("microkit_template_spec", unsafe { struct_to_bytes(&spec_trusted_loader) })
             .unwrap();

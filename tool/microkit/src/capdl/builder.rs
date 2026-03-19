@@ -91,17 +91,17 @@ const PD_BASE_VM_TCB_CAP: u64 = PD_BASE_PD_TCB_CAP + 64;
 const PD_BASE_VCPU_CAP: u64 = PD_BASE_VM_TCB_CAP + 64;
 const PD_BASE_IOPORT_CAP: u64 = PD_BASE_VCPU_CAP + 64;
 
-// Valid only if the PD is template PD
-// Maximum 16 dynamic PD (child) per template PD (parent)
+// Valid only if the PD is monitor PD
+// Maximum 16 dynamic PD (child) per monitor PD (parent)
 // (working) CNode cap for the child PD
 const PD_BASE_PD_CND_CAP: u64 = PD_BASE_IOPORT_CAP + 64;
 // Background CNode cap for the child PD
 const PD_BASE_PD_BKC_CAP: u64 = PD_BASE_PD_CND_CAP + 16;
 // (working) VSpace cap for the child PD
 const PD_BASE_PD_VSP_CAP: u64 = PD_BASE_PD_BKC_CAP + 16;
-// As a template PD, it runs a prologue for trusted loading
-// which requires the access to the working CNode of the template PD
-// (in return, the template PD must be trusted)
+// As a monitor PD, it runs a prologue for trusted loading
+// which requires the access to the working CNode of the monitor PD
+// (in return, the monitor PD must be trusted)
 // (this works for dynamic PD too, but we don't grant it for them in here)
 const PD_BASE_PD_SELF_CND_CAP: u64 = PD_BASE_PD_VSP_CAP + 16;
 
@@ -609,7 +609,7 @@ pub fn build_capdl_spec(
 
         let parent_idx_opt = system.protection_domains[pd_global_idx].parent;
         let is_dyn = parent_idx_opt
-            .map_or(false, |pi| system.protection_domains[pi].is_template);
+            .map_or(false, |pi| system.protection_domains[pi].is_monitor);
 
         let pd = &mut system.protection_domains[pd_global_idx];
 
@@ -1049,8 +1049,8 @@ pub fn build_capdl_spec(
             TcbBoundSlot::CSpace as u32,
             pd_cnode_cap.clone(),
         ));
-        // Allow each template PD to access its CNode
-        if pd.is_template == true {
+        // Allow each monitor PD to access its CNode
+        if pd.is_monitor == true {
             capdl_util_insert_cap_into_cspace(
                 &mut spec_container,
                 pd_cnode_obj_id,

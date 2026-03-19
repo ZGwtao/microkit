@@ -270,8 +270,8 @@ pub struct ProtectionDomain {
     /// once we flatten each PD and its children into one list.
     pub child_pds: Vec<ProtectionDomain>,
     pub has_children: bool,
-    /// DYN: template PD attribute
-    pub is_template: bool,
+    /// DYN: monitor PD attribute
+    pub is_monitor: bool,
     /// Index into the total list of protection domains if a parent
     /// protection domain exists
     pub parent: Option<usize>,
@@ -483,7 +483,7 @@ impl ProtectionDomain {
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         is_child: bool,
-        is_template: bool,
+        is_monitor: bool,
     ) -> Result<ProtectionDomain, String> {
         let mut attrs = vec![
             "name",
@@ -1135,7 +1135,7 @@ impl ProtectionDomain {
             child_pds,
             virtual_machine,
             has_children,
-            is_template,
+            is_monitor,
             parent: None,
             setvar_id,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
@@ -1842,7 +1842,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
             "protection_domain" => root_pds.push(ProtectionDomain::from_xml(
                 config, &xml_sdf, &child, false, false,
             )?),
-            "template" => root_pds.push(ProtectionDomain::from_xml(
+            "monitor_protection_domain" => root_pds.push(ProtectionDomain::from_xml(
                 config, &xml_sdf, &child, false, true,
             )?),
             "channel" => channel_nodes.push(child),
