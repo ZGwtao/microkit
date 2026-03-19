@@ -304,11 +304,11 @@ pub fn patch_symbols_monitor_pd(
 
         let elf_obj = &mut pd_elf_files[mon_idx];
         elf_obj
-            .write_symbol("microkit_template_spec", unsafe { struct_to_bytes(&spec_trusted_loader) })
+            .write_symbol("microkit_trusted_loading_info", unsafe { struct_to_bytes(&spec_trusted_loader) })
             .unwrap();
 
         elf_obj
-            .write_symbol("microkit_template_spec_ar", unsafe { struct_to_bytes(&monitor_os_services) })
+            .write_symbol("microkit_monitor_ossvc_database", unsafe { struct_to_bytes(&monitor_os_services) })
             .unwrap();
     }
 
