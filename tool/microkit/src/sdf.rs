@@ -421,7 +421,7 @@ impl SysMap {
             true
         };
 
-        let mut optional = optional; // start with the parameter
+        let mut optional = optional;
         if !optional {
             optional = if let Some(xml_optional) = node.attribute("optional") {
                 match str_to_bool(xml_optional) {
@@ -435,7 +435,7 @@ impl SysMap {
                     }
                 }
             } else {
-                false // Default to required
+                false
             };
         }
 
@@ -1165,8 +1165,6 @@ impl OSService {
             8
         };
 
-        // TODO: get osservice name...
-
         let mut ends: Vec<u64> = Vec::new();
         let mut maps: Vec<SysMap> = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
@@ -1201,9 +1199,7 @@ impl OSService {
                     maps.push(map);
                 }
                 "channel_end" => {
-                    // TODO
                     let end = ChannelEnd::from_xml_ossvc(xml_sdf, &child)?;
-                    // fetch a channel and enqueue
                     ends.push(end);
                 }
                 _ => {
@@ -1223,7 +1219,8 @@ impl OSService {
             data_name,
             svc_type: ossvc_type,
             maps,
-            //irqs,
+            /* irqs, */
+            /* ioports, */
             setvars,
             ends,
         })
@@ -1441,20 +1438,7 @@ impl ChannelEnd {
             ));
         }
         let end_id = checked_lookup(xml_sdf, node, "id")?.parse::<u64>().unwrap();
-        // TODO
-        // ...
-        // check existency:
-        //  => If this channel end matches with nothing, then abort
-        //
-        //if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
         Ok(end_id)
-        //} else {
-        //    Err(value_error(
-        //        xml_sdf,
-        //        node,
-        //        format!("invalid PD name '{end_pd}'"),
-        //    ))
-        //}
     }
 
     fn from_xml<'a>(
