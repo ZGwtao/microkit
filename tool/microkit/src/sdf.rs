@@ -279,15 +279,15 @@ pub struct ProtectionDomain {
     pub setvar_id: Option<String>,
     /// Location in the parsed SDF file
     text_pos: Option<roxmltree::TextPos>,
-    /// Access rights groups
-    pub acgrps: Vec<AccessRightsDomain>,
+    /// OS services that this PD has access to
+    pub os_services: Vec<OSService>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
-pub struct AccessRightsDomain {
+pub struct OSService {
     pub id: u8,
     pub data_name: String,
-    pub grp_type: u8,
+    pub svc_type: u8,
     pub maps: Vec<SysMap>,
     pub setvars: Vec<SysSetVar>,
     pub ends: Vec<u64>,
@@ -629,7 +629,7 @@ impl ProtectionDomain {
         let mut ioports = Vec::new();
         let mut setvars: Vec<SysSetVar> = Vec::new();
         let mut child_pds = Vec::new();
-        let mut acgrps = Vec::new();
+        let mut os_services = Vec::new();
 
         let mut program_image = None;
         let mut virtual_machine = None;
@@ -1084,16 +1084,16 @@ impl ProtectionDomain {
 
                     virtual_machine = Some(vm);
                 }
-                "acgroup" => {
-                    let accrss_group = AccessRightsDomain::from_xml(config, xml_sdf, &child, stack_size)?;
+                "os_service" => {
+                    let ossvc = OSService::from_xml(config, xml_sdf, &child, stack_size)?;
 
                     println!("length old = {}", maps.len());
-                    // push all elements scanned from acgroup to parent PD...
-                    maps.extend(accrss_group.maps.iter().cloned());
-                    setvars.extend(accrss_group.setvars.iter().cloned());
+                    // push all elements scanned from os_service to parent PD...
+                    maps.extend(ossvc.maps.iter().cloned());
+                    setvars.extend(ossvc.setvars.iter().cloned());
 
                     println!("length new = {}", maps.len());
-                    acgrps.push(accrss_group);
+                    os_services.push(ossvc);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
@@ -1139,33 +1139,33 @@ impl ProtectionDomain {
             parent: None,
             setvar_id,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
-            acgrps,
+            os_services,
         })
     }
 }
 
-impl AccessRightsDomain {
+impl OSService {
     fn from_xml(
         config: &Config,
         xml_sdf: &XmlSystemDescription,
         node: &roxmltree::Node,
         stack_size: u64,
-    ) -> Result<AccessRightsDomain, String> {
+    ) -> Result<OSService, String> {
         // get group id from XML file
-        let id = if let Some(acrs_id) = node.attribute("gid") {
+        let id = if let Some(acrs_id) = node.attribute("svc_id") {
             sdf_parse_number(acrs_id, node)? as u8
         } else {
             0
         };
 
-        // get acgroup type (like FS/serial/network...)
-        let acg_type = if let Some(grp_type) = node.attribute("grp_type") {
-            sdf_parse_number(grp_type, node)? as u8
+        // get osservice type (like FS/serial/network...)
+        let ossvc_type = if let Some(svc_type) = node.attribute("svc_type") {
+            sdf_parse_number(svc_type, node)? as u8
         } else {
             8
         };
 
-        // TODO: get acgroup name...
+        // TODO: get osservice name...
 
         let mut ends: Vec<u64> = Vec::new();
         let mut maps: Vec<SysMap> = Vec::new();
@@ -1179,7 +1179,7 @@ impl AccessRightsDomain {
                 "map" => {
                     let map_max_vaddr = config.pd_map_max_vaddr(stack_size);
                     let map = SysMap::from_xml(xml_sdf, &child, true, map_max_vaddr, true)?;
-                    // all mappings from access right domains are optional
+                    // all mappings from os_services are optional
                     // map.optional = true;
                     if let Some(setvar_vaddr) = child.attribute("setvar_vaddr") {
                         // Check that the symbol does not already exist
@@ -1202,14 +1202,14 @@ impl AccessRightsDomain {
                 }
                 "channel_end" => {
                     // TODO
-                    let end = ChannelEnd::from_xml_acg(xml_sdf, &child)?;
+                    let end = ChannelEnd::from_xml_ossvc(xml_sdf, &child)?;
                     // fetch a channel and enqueue
                     ends.push(end);
                 }
                 _ => {
                     let pos = xml_sdf.doc.text_pos_at(child.range().start);
                     return Err(format!(
-                        "Invalid XML element '{}' for access rights group: {}",
+                        "Invalid XML element '{}' for osservice: {}",
                         child.tag_name().name(),
                         loc_string(xml_sdf, pos)
                     ));
@@ -1218,10 +1218,10 @@ impl AccessRightsDomain {
         }
         let data_name = checked_lookup(xml_sdf, node, "data_path")?.to_string();
 
-        Ok(AccessRightsDomain {
+        Ok(OSService {
             id,
             data_name,
-            grp_type: acg_type,
+            svc_type: ossvc_type,
             maps,
             //irqs,
             setvars,
@@ -1426,12 +1426,12 @@ impl SysMemoryRegion {
 }
 
 impl ChannelEnd {
-    fn from_xml_acg<'a>(
+    fn from_xml_ossvc<'a>(
         xml_sdf: &'a XmlSystemDescription,
         node: &'a roxmltree::Node,
     ) -> Result<u64, String> {
         let node_name = node.tag_name().name();
-        // in acgroup, we use a different way of recognising an optional channel end
+        // in os_services, we use a different way of recognising an optional channel end
         if node_name != "channel_end" {
             let pos = xml_sdf.doc.text_pos_at(node.range().start);
             return Err(format!(

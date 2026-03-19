@@ -10,7 +10,7 @@ use crate::{
     elf::ElfFile,
     sdf::{self, SysMemoryRegion, SystemDescription},
     sel4::{Arch, Config},
-    trustedlo::{AcGrpArrList, AcGrpArr, TrustedLoaderMetadataArray, MemoryMapping, StrippedMapping},
+    trustedlo::{MonitorSvcDatabase, ProtoconSvcDatabase, TrustedLoaderMetadataArray, MemoryMapping, StrippedMapping},
     MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH, MAX_CHANNELS,
     util::{monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes}
 };
@@ -199,7 +199,7 @@ pub fn patch_symbols_template_pd(
         .filter(|(_, pd)| pd.is_template)
     {
         let mut spec_trusted_loader = TrustedLoaderMetadataArray::default();
-        let mut spec_access_rights  = AcGrpArrList::default();
+        let mut monitor_os_services  = MonitorSvcDatabase::default();
 
         for (curr_idx, c) in system.protection_domains
             .iter()
@@ -269,16 +269,16 @@ pub fn patch_symbols_template_pd(
             .enumerate()
             .filter(|(_, c)| c.parent == Some(tpl_idx))
         {
-            let mut acg_arr = AcGrpArr::default();
-            acg_arr.pd_idx = curr_idx as u8;
+            let mut protocon_os_services = ProtoconSvcDatabase::default();
+            protocon_os_services.pd_idx = curr_idx as u8;
 
-            for (acg_idx, a) in c.acgrps.iter().enumerate() {
-                acg_arr.array[acg_idx].grp_type = a.grp_type as u8;
-                acg_arr.array[acg_idx].grp_idx = acg_idx as u8;
+            for (svc_idx, a) in c.os_services.iter().enumerate() {
+                protocon_os_services.array[svc_idx].svc_type = a.svc_type as u8;
+                protocon_os_services.array[svc_idx].svc_idx = svc_idx as u8;
 
                 for (map_idx, map) in a.maps.iter().enumerate() {
                     if let Some(gm) = c.maps_opt.iter().find(|gm| gm.vaddr == map.vaddr) {
-                        acg_arr.array[acg_idx].mappings[map_idx] = StrippedMapping {
+                        protocon_os_services.array[svc_idx].mappings[map_idx] = StrippedMapping {
                             vaddr: gm.vaddr,
                             number_of_pages: gm.number_of_pages,
                             page_size: gm.page_size,
@@ -290,16 +290,16 @@ pub fn patch_symbols_template_pd(
                     if e_idx >= 8 {
                         break;
                     }
-                    acg_arr.array[acg_idx].channels[e_idx] = *end as u8;
+                    protocon_os_services.array[svc_idx].channels[e_idx] = *end as u8;
                 }
-                acg_arr.array[acg_idx].data_name.set_trunc(a.data_name.as_str());
-                acg_arr.array[acg_idx].grp_init = true;
-                acg_arr.grp_num += 1;
+                protocon_os_services.array[svc_idx].data_name.set_trunc(a.data_name.as_str());
+                protocon_os_services.array[svc_idx].svc_init = true;
+                protocon_os_services.svc_num += 1;
             }
 
-            assert!(acg_arr.grp_num == c.acgrps.len() as u8);
-            spec_access_rights.list[spec_access_rights.num] = acg_arr.clone();
-            spec_access_rights.num += 1;
+            assert!(protocon_os_services.svc_num == c.os_services.len() as u8);
+            monitor_os_services.list[monitor_os_services.num] = protocon_os_services.clone();
+            monitor_os_services.num += 1;
         }
 
         let elf_obj = &mut pd_elf_files[tpl_idx];
@@ -308,7 +308,7 @@ pub fn patch_symbols_template_pd(
             .unwrap();
 
         elf_obj
-            .write_symbol("microkit_template_spec_ar", unsafe { struct_to_bytes(&spec_access_rights) })
+            .write_symbol("microkit_template_spec_ar", unsafe { struct_to_bytes(&monitor_os_services) })
             .unwrap();
     }
 

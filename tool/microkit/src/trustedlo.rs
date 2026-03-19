@@ -156,21 +156,21 @@ impl DataNameCStr {
 
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct AcGrp {
-    pub grp_init:   bool,
-    pub grp_idx:    u8,
-    pub grp_type:   u8,
+pub struct OSSvc {
+    pub svc_init:   bool,
+    pub svc_idx:    u8,
+    pub svc_type:   u8,
     pub channels:   [u8; 4],
     pub irqs:       [u8; 4],
     pub mappings:   [StrippedMapping; 4],
     pub data_name:  DataNameCStr,
 }
-impl Default for AcGrp {
+impl Default for OSSvc {
     fn default() -> Self {
-        AcGrp {
-            grp_init:   false,
-            grp_idx:    0,
-            grp_type:   0,
+        OSSvc {
+            svc_init:   false,
+            svc_idx:    0,
+            svc_type:   0,
             channels:   [!0u8; 4],
             irqs:       [!0u8; 4],
             mappings:   [StrippedMapping::default(); 4],
@@ -179,48 +179,48 @@ impl Default for AcGrp {
     }
 }
 
-/// AcGrpArr:
+/// ProtoconSvcDatabase:
 ///  records the available access rights domain that belongs to
 ///  one dynamic PD, whose limit for the domains equals 16
 #[repr(C)]
 #[derive(Copy, Clone)]
-pub struct AcGrpArr {
+pub struct ProtoconSvcDatabase {
     pub pd_idx: u8,
     // number of available access rights domain
-    pub grp_num: u8,
+    pub svc_num: u8,
     // Each dynamic PD has at most 16 access rights domain available
-    pub array: [AcGrp; 16],
+    pub array: [OSSvc; 16],
 }
-impl Default for AcGrpArr {
+impl Default for ProtoconSvcDatabase {
     fn default() -> Self {
         use std::array::from_fn;
-        let arr = from_fn(|_| {
-            let grp = AcGrp::default();
-            grp
+        let svc_db = from_fn(|_| {
+            let svc = OSSvc::default();
+            svc
         });
-        AcGrpArr { pd_idx: 0, grp_num: 0, array: arr }
+        ProtoconSvcDatabase { pd_idx: 0, svc_num: 0, array: svc_db }
     }
 }
 
-/// AcGrpArrList:
+/// MonitorSvcDatabase:
 ///  records the list of access rights compilation of each dynamic PD
 ///  that belongs to one template PD
 #[repr(C)]
-pub struct AcGrpArrList {
+pub struct MonitorSvcDatabase {
     // The number of available dynamic PD in a template PD
     pub num: usize,
     // Each template PD has at most 16 dynamic PD available
-    pub list: [AcGrpArr; 16],
+    pub list: [ProtoconSvcDatabase; 16],
 }
-impl Default for AcGrpArrList {
+impl Default for MonitorSvcDatabase {
     fn default() -> Self {
         use std::array::from_fn;
-        let arr_list = from_fn(|i| {
-            let mut grp_arr = AcGrpArr::default();
-            grp_arr.pd_idx = i as u8;
-            grp_arr
+        let monitor_svc_db = from_fn(|i| {
+            let mut protocon_svc_db = ProtoconSvcDatabase::default();
+            protocon_svc_db.pd_idx = i as u8;
+            protocon_svc_db
         });
-        AcGrpArrList { num: 0, list: arr_list }
+        MonitorSvcDatabase { num: 0, list: monitor_svc_db }
     }
 }
 
