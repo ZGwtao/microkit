@@ -180,15 +180,15 @@ impl Default for OSSvc {
 }
 
 /// ProtoconSvcDatabase:
-///  records the available access rights domain that belongs to
+///  records the available os services (svc) that belongs to
 ///  one dynamic PD, whose limit for the domains equals 16
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ProtoconSvcDatabase {
     pub pd_idx: u8,
-    // number of available access rights domain
+    // number of available os services in a dynamic PD
     pub svc_num: u8,
-    // Each dynamic PD has at most 16 access rights domain available
+    // Each dynamic PD has at most 16 os services available
     pub array: [OSSvc; 16],
 }
 impl Default for ProtoconSvcDatabase {
@@ -203,13 +203,13 @@ impl Default for ProtoconSvcDatabase {
 }
 
 /// MonitorSvcDatabase:
-///  records the list of access rights compilation of each dynamic PD
-///  that belongs to one template PD
+///  records the list of os services compilation of each dynamic PD
+///  that belongs to one monitor PD
 #[repr(C)]
 pub struct MonitorSvcDatabase {
-    // The number of available dynamic PD in a template PD
+    // The number of available dynamic PD in a monitor PD
     pub num: usize,
-    // Each template PD has at most 16 dynamic PD available
+    // Each monitor PD has at most 16 dynamic PD available
     pub list: [ProtoconSvcDatabase; 16],
 }
 impl Default for MonitorSvcDatabase {
