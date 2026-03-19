@@ -8,9 +8,13 @@ use crate::{
     MAX_CHANNELS
 };
 
+/// Below are the data structures for recording the trusted loading information of each dynamic PD
+pub const MAX_NAME: usize = 63;
+pub const MAX_MAPPINGS: usize = MAX_CHANNELS;
+
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
-pub struct MemoryMapping {
+pub struct TSLDRMappingInfo {
     pub vaddr: u64,
     pub page: u64,
     pub number_of_pages: u64,
@@ -18,9 +22,9 @@ pub struct MemoryMapping {
     pub rights: u64,
     pub attrs: u64,
 }
-impl Default for MemoryMapping {
+impl Default for TSLDRMappingInfo {
     fn default() -> Self {
-        MemoryMapping {
+        TSLDRMappingInfo {
             vaddr: 0,
             page: 0,
             number_of_pages: 0,
@@ -31,99 +35,74 @@ impl Default for MemoryMapping {
     }
 }
 
-#[repr(C)]
-#[derive(Copy, Clone)]
-pub struct StrippedMapping {
-    pub vaddr: u64,
-    pub number_of_pages: u64,
-    pub page_size: u64,
-}
-impl Default for StrippedMapping {
-    fn default() -> Self {
-        StrippedMapping {
-            vaddr: 0,
-            number_of_pages: 0,
-            page_size: 0,
-        }
-    }
-}
+/// TSLDRMetadataInfo:
+///  records the information of one child (dynamic) PD that is loaded by the monitor PD, including:
+///  - the child PD index and system hash of the child PD
+///  - the channels and irqs used by the child PD
+///  - the memory mappings used by the child PD
+///  - whether the child PD is initialised, which is used by the monitor to determine trusted loading states
 
 #[repr(C)]
-pub struct TrustedLoaderMetadata {
+pub struct TSLDRMetadataInfo {
     pub child_id:   usize,
     pub system_hash: u64,
-    pub public_key: [u8; 32],
     pub channels:   [u8; MAX_CHANNELS],
     pub cstate:     [u8; MAX_CHANNELS],
     pub irqs:       [u64; MAX_CHANNELS],
-    pub mappings:   [MemoryMapping; 62],
+    pub mappings:   [TSLDRMappingInfo; MAX_MAPPINGS],
     pub init:       u8,
 }
-
-impl Default for TrustedLoaderMetadata {
+impl Default for TSLDRMetadataInfo {
     fn default() -> Self {
-        TrustedLoaderMetadata {
+        TSLDRMetadataInfo {
             child_id:   0,
             system_hash: 0,
-            public_key: [0u8; 32],
             channels:   [0u8; MAX_CHANNELS],
             cstate:     [0u8; MAX_CHANNELS],
             irqs:       [0u64; MAX_CHANNELS],
-            mappings:   [MemoryMapping::default(); 62],
+            mappings:   [TSLDRMappingInfo::default(); MAX_MAPPINGS],
             init:       0
         }
     }
 }
 
+/// TSLDRMDInfoDB:
+///  records the available child (dynamic) PDs information that is loaded by the monitor PD
+///  that belongs to one monitor PD, whose limit for the child PDs equals 16
+///  The monitor PD will use this information to determine the trusted loading states of each child PD
 #[repr(C)]
-pub struct TrustedLoaderMetadataArray {
-    pub avail_trusted_loader: u8,
-    /* maximum is 64 per monitor */
-    pub trusted_loader_md_array: [TrustedLoaderMetadata; 16],
+pub struct TSLDRMDInfoDB {
+    /// maximum is 16 per monitor
+    pub avail_metadata_info: u8,
+    /// maximum is 16 per monitor
+    pub trusted_loading_metadata_info_database: [TSLDRMetadataInfo; 16],
 }
-impl Default for TrustedLoaderMetadataArray {
+impl Default for TSLDRMDInfoDB {
     fn default() -> Self {
         use std::array::from_fn;
-        let trusted_loader_md_array = from_fn(|i| {
-            let mut md = TrustedLoaderMetadata::default();
-            md.child_id = i as usize; // 0..63
+        let trusted_loading_metadata_info_database = from_fn(|i| {
+            let mut md = TSLDRMetadataInfo::default();
+            md.child_id = i as usize;
             md
         });
-        TrustedLoaderMetadataArray { avail_trusted_loader: 0, trusted_loader_md_array }
+        TSLDRMDInfoDB { avail_metadata_info: 0, trusted_loading_metadata_info_database }
     }
 }
 
-
-pub const MAX_NAME: usize = 63;
+/// Below are the data structures for recording the OS services information of each dynamic PD,
+/// which will be used by the monitor to determine the OS services compilation of each dynamic PD
+/// and then load the corresponding data file for each dynamic PD.
 
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct DataNameCStr {
-    pub bytes: [u8; MAX_NAME + 1], // always null-terminated
+    pub bytes: [u8; MAX_NAME + 1],
 }
-
 impl Default for DataNameCStr {
     #[inline]
     fn default() -> Self { Self { bytes: [0; MAX_NAME + 1] } }
 }
-
 impl DataNameCStr {
-    /// Set name; errors if `s.len() > MAX_NAME`.
-    #[inline]
-    pub fn set(&mut self, s: &str) -> Result<(), ()> {
-        let n = s.as_bytes().len();
-        if n > MAX_NAME { return Err(()); }
-        // write bytes
-        self.bytes[..n].copy_from_slice(s.as_bytes());
-        // write terminator and clear the tail (optional but neat)
-        self.bytes[n] = 0;
-        if n + 1 < self.bytes.len() {
-            self.bytes[n + 1..].fill(0);
-        }
-        Ok(())
-    }
-
-    /// Truncating setter (keeps API total if you prefer no Result).
     #[inline]
     pub fn set_trunc(&mut self, s: &str) {
         let n = core::cmp::min(s.len(), MAX_NAME);
@@ -133,26 +112,40 @@ impl DataNameCStr {
             self.bytes[n + 1..].fill(0);
         }
     }
-
-    /// Returns as &str (UTF-8). Safe because we only accept &str on input.
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        let n = self.bytes.iter().position(|&b| b == 0).unwrap_or(self.bytes.len());
-        // Safety: constructed from &str; we never write non-UTF8.
-        unsafe { str::from_utf8_unchecked(&self.bytes[..n]) }
-    }
-
-    /// Get raw C pointer if you pass it to C.
-    #[inline]
-    pub fn as_ptr(&self) -> *const u8 { self.bytes.as_ptr() }
-
-    #[inline]
-    pub fn clear(&mut self) { self.bytes = [0; MAX_NAME + 1]; }
-
-    /// Is it empty ("")?
-    #[inline]
-    pub fn is_empty(&self) -> bool { self.bytes[0] == 0 }
 }
+
+/// SvcMappingInfo:
+///  records the information of one memory mapping used by one os service (svc), including:
+///  - the virtual address of the mapping
+///  - the number of pages and page size of the mapping
+/// This is a stripped down version of TSLDRMappingInfo,
+///     we use it to setup tsldr_context from OS service information
+
+#[repr(C)]
+#[derive(Copy, Clone)]
+pub struct SvcMappingInfo {
+    pub vaddr: u64,
+    pub number_of_pages: u64,
+    pub page_size: u64,
+}
+impl Default for SvcMappingInfo {
+    fn default() -> Self {
+        SvcMappingInfo {
+            vaddr: 0,
+            number_of_pages: 0,
+            page_size: 0,
+        }
+    }
+}
+
+/// OSSvc:
+///  records the information of one os service (svc) that belongs to one dynamic PD, including:
+///  - whether the os service is initialised
+///  - the os service type and index
+///  - the channels and irqs used by the os service
+///  - the memory mappings used by the os service
+///  - the data file name for the os service, which is used by the monitor to load the corresponding data file
+//      for the os service based on the os service type and index
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -162,7 +155,7 @@ pub struct OSSvc {
     pub svc_type:   u8,
     pub channels:   [u8; 4],
     pub irqs:       [u8; 4],
-    pub mappings:   [StrippedMapping; 4],
+    pub mappings:   [SvcMappingInfo; 4],
     pub data_name:  DataNameCStr,
 }
 impl Default for OSSvc {
@@ -173,7 +166,7 @@ impl Default for OSSvc {
             svc_type:   0,
             channels:   [!0u8; 4],
             irqs:       [!0u8; 4],
-            mappings:   [StrippedMapping::default(); 4],
+            mappings:   [SvcMappingInfo::default(); 4],
             data_name:  DataNameCStr::default(),
         }
     }
@@ -181,7 +174,7 @@ impl Default for OSSvc {
 
 /// ProtoconSvcDatabase:
 ///  records the available os services (svc) that belongs to
-///  one dynamic PD, whose limit for the domains equals 16
+///  one dynamic PD, whose limit for the svcs equals 16
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct ProtoconSvcDatabase {

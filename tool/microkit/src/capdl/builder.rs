@@ -23,7 +23,7 @@ use crate::{
         util::*,
     }, elf::ElfFile, sdf::{
         BUDGET_DEFAULT, CpuCore, MONITOR_PD_NAME, MONITOR_PRIORITY, SysMap, SysMapPerms, SystemDescription
-    }, sel4::{Arch, Config, PageSize}, trustedlo::MemoryMapping, util::{ranges_overlap, round_down, round_up}
+    }, sel4::{Arch, Config, PageSize}, trustedlo::TSLDRMappingInfo, util::{ranges_overlap, round_down, round_up}
 };
 
 // Corresponds to the IPC buffer symbol in libmicrokit and the monitor
@@ -682,7 +682,7 @@ pub fn build_capdl_spec(
             );
             // Update the mapping slot in BKC
             if map.optional {
-                pd.maps_opt.push(MemoryMapping {
+                pd.maps_opt.push(TSLDRMappingInfo {
                     vaddr: (map.vaddr),
                     page: (map_slot - BKC_CNODE_MAPPING_CAP),
                     number_of_pages: (frames.len() as u64),

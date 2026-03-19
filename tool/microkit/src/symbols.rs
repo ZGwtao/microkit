@@ -10,7 +10,7 @@ use crate::{
     elf::ElfFile,
     sdf::{self, SysMemoryRegion, SystemDescription},
     sel4::{Arch, Config},
-    trustedlo::{MonitorSvcDatabase, ProtoconSvcDatabase, TrustedLoaderMetadataArray, MemoryMapping, StrippedMapping},
+    trustedlo::{MonitorSvcDatabase, ProtoconSvcDatabase, TSLDRMDInfoDB, TSLDRMappingInfo, SvcMappingInfo},
     MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH, MAX_CHANNELS,
     util::{monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes}
 };
@@ -198,7 +198,7 @@ pub fn patch_symbols_monitor_pd(
         .enumerate()
         .filter(|(_, pd)| pd.is_monitor)
     {
-        let mut spec_trusted_loader = TrustedLoaderMetadataArray::default();
+        let mut spec_trusted_loader = TSLDRMDInfoDB::default();
         let mut monitor_os_services  = MonitorSvcDatabase::default();
 
         for (curr_idx, c) in system.protection_domains
@@ -210,7 +210,7 @@ pub fn patch_symbols_monitor_pd(
             // child_idx != curr_idx, the latter is the global idx of all PDs...
             let child_idx = c.id.unwrap() as usize;
             // Make sure the init function instantiate the spec correctly
-            assert!(spec_trusted_loader.trusted_loader_md_array[child_idx].child_id == child_idx);
+            assert!(spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].child_id == child_idx);
 
             let mut opt_channel = [0u8; MAX_CHANNELS];
             let mut opt_channel_attr = [0u8; MAX_CHANNELS];
@@ -239,15 +239,15 @@ pub fn patch_symbols_monitor_pd(
                 }
             }
 
-            spec_trusted_loader.trusted_loader_md_array[child_idx].channels.copy_from_slice(&opt_channel);
-            spec_trusted_loader.trusted_loader_md_array[child_idx].cstate.copy_from_slice(&opt_channel_attr);
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].channels.copy_from_slice(&opt_channel);
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].cstate.copy_from_slice(&opt_channel_attr);
 
             // Iterate all optional mappings for each dynamic PD
             // Each optional mapping contains no less than 1 frame (which means it is a region)
             // Each PD has a vector of optional mappings, referenced by PD indices
             // Within one vector, we can refer to a mapping using the mapping indices
             for (map_idx, map) in c.maps_opt.iter().enumerate() {
-                spec_trusted_loader.trusted_loader_md_array[child_idx].mappings[map_idx] = MemoryMapping {
+                spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].mappings[map_idx] = TSLDRMappingInfo {
                     vaddr: map.vaddr,
                     page: map.page,
                     number_of_pages: map.number_of_pages,
@@ -259,8 +259,8 @@ pub fn patch_symbols_monitor_pd(
 
             // We can use this field to tell the trusted loader
             // that this child PD has optional resources
-            spec_trusted_loader.trusted_loader_md_array[child_idx].system_hash = 0xffff;
-            spec_trusted_loader.avail_trusted_loader += 1;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].system_hash = 0xffff;
+            spec_trusted_loader.avail_metadata_info += 1;
 
         } 
 
@@ -278,7 +278,7 @@ pub fn patch_symbols_monitor_pd(
 
                 for (map_idx, map) in a.maps.iter().enumerate() {
                     if let Some(gm) = c.maps_opt.iter().find(|gm| gm.vaddr == map.vaddr) {
-                        protocon_os_services.array[svc_idx].mappings[map_idx] = StrippedMapping {
+                        protocon_os_services.array[svc_idx].mappings[map_idx] = SvcMappingInfo {
                             vaddr: gm.vaddr,
                             number_of_pages: gm.number_of_pages,
                             page_size: gm.page_size,
