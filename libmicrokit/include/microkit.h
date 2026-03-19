@@ -96,6 +96,7 @@ static inline void microkit_internal_crash(seL4_Error err)
 
 static inline void microkit_notify(microkit_channel ch)
 {
+#if 0
     if (ch > MICROKIT_MAX_CHANNEL_ID || (microkit_notifications & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_notify: invalid channel given '");
@@ -103,6 +104,7 @@ static inline void microkit_notify(microkit_channel ch)
         microkit_dbg_puts("'\n");
         return;
     }
+#endif
     seL4_Signal(BASE_OUTPUT_NOTIFICATION_CAP + ch);
 }
 
@@ -155,6 +157,7 @@ static inline void microkit_pd_stop(microkit_child pd)
 
 static inline microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msginfo msginfo)
 {
+#if 0
     if (ch > MICROKIT_MAX_CHANNEL_ID || (microkit_pps & (1ULL << ch)) == 0) {
         microkit_dbg_puts(microkit_name);
         microkit_dbg_puts(" microkit_ppcall: invalid channel given '");
@@ -162,6 +165,7 @@ static inline microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msg
         microkit_dbg_puts("'\n");
         return seL4_MessageInfo_new(0, 0, 0, 0);
     }
+#endif
     return seL4_Call(BASE_ENDPOINT_CAP + ch, msginfo);
 }
 
