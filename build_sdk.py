@@ -405,7 +405,11 @@ SUPPORTED_CONFIGS = (
             "KernelPrinting": True,
             "KernelVerificationBuild": False
         },
-        kernel_options_arch={},
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                "KernelArmExportPMUUser": True,
+            },
+        },
     ),
     ConfigInfo(
         name="benchmark",
