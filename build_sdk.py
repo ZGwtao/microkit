@@ -405,7 +405,12 @@ SUPPORTED_CONFIGS = (
             "KernelPrinting": True,
             "KernelVerificationBuild": False
         },
-        kernel_options_arch={},
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                "KernelArmExportPMUUser": True,
+                "KernelArmAbsMap": True,
+            },
+        },
     ),
     ConfigInfo(
         name="benchmark",
@@ -419,6 +424,7 @@ SUPPORTED_CONFIGS = (
         kernel_options_arch={
             KernelArch.AARCH64: {
                 "KernelArmExportPMUUser": True,
+                "KernelArmAbsMap": True,
             },
             KernelArch.X86_64: {
                 "KernelExportPMCUser": True,
