@@ -10,7 +10,7 @@ use crate::{
     elf::ElfFile,
     sdf::{self, SysMemoryRegion, SystemDescription},
     sel4::{Arch, Config},
-    trustedlo::{MonitorSvcDatabase, ProtoconSvcDatabase, TSLDRMDInfoDB, TSLDRMappingInfo, SvcMappingInfo},
+    trustedlo::{TSLDRMDInfoDB, TSLDRMappingInfo},
     MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH, MAX_CHANNELS,
     util::{monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes}
 };
@@ -199,7 +199,6 @@ pub fn patch_symbols_monitor_pd(
         .filter(|(_, pd)| pd.is_monitor)
     {
         let mut spec_trusted_loader = TSLDRMDInfoDB::default();
-        let mut monitor_os_services  = MonitorSvcDatabase::default();
 
         for (curr_idx, c) in system.protection_domains
             .iter()
@@ -262,44 +261,6 @@ pub fn patch_symbols_monitor_pd(
             spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].system_hash = 0xffff;
             spec_trusted_loader.avail_metadata_info += 1;
 
-        } 
-
-        for (curr_idx, c) in system.protection_domains
-            .iter()
-            .enumerate()
-            .filter(|(_, c)| c.parent == Some(mon_idx))
-        {
-            let mut protocon_os_services = ProtoconSvcDatabase::default();
-            protocon_os_services.pd_idx = curr_idx as u8;
-
-            for (svc_idx, a) in c.os_services.iter().enumerate() {
-                protocon_os_services.array[svc_idx].svc_type = a.svc_type as u8;
-                protocon_os_services.array[svc_idx].svc_idx = svc_idx as u8;
-
-                for (map_idx, map) in a.maps.iter().enumerate() {
-                    if let Some(gm) = c.maps_opt.iter().find(|gm| gm.vaddr == map.vaddr) {
-                        protocon_os_services.array[svc_idx].mappings[map_idx] = SvcMappingInfo {
-                            vaddr: gm.vaddr,
-                            page_num: gm.page_num,
-                            page_size: gm.page_size,
-                        };
-                    }
-                }
-
-                for (e_idx, end) in a.ends.iter().enumerate() {
-                    if e_idx >= 8 {
-                        break;
-                    }
-                    protocon_os_services.array[svc_idx].channels[e_idx] = *end as u8;
-                }
-                protocon_os_services.array[svc_idx].data_name.set_trunc(a.data_name.as_str());
-                protocon_os_services.array[svc_idx].svc_init = true;
-                protocon_os_services.svc_num += 1;
-            }
-
-            assert!(protocon_os_services.svc_num == c.os_services.len() as u8);
-            monitor_os_services.list[monitor_os_services.num] = protocon_os_services.clone();
-            monitor_os_services.num += 1;
         }
 
         let elf_obj = &mut pd_elf_files[mon_idx];
@@ -307,9 +268,6 @@ pub fn patch_symbols_monitor_pd(
             .write_symbol("microkit_trusted_loading_info", unsafe { struct_to_bytes(&spec_trusted_loader) })
             .unwrap();
 
-        elf_obj
-            .write_symbol("microkit_monitor_ossvc_database", unsafe { struct_to_bytes(&monitor_os_services) })
-            .unwrap();
     }
 
     Ok(())

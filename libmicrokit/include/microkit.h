@@ -37,7 +37,6 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 
 /* Only valid in the 'monitor_protection_domain' configuration */
 #define MICROKIT_TRUSTED_LOADING_INFO_LENGTH       (1UL << 16)
-#define MICROKIT_MONITOR_OSSVC_DATABASE_LENGTH    (1UL << 16)
 
 /* User provided functions */
 void init(void);
@@ -52,8 +51,6 @@ extern seL4_CPtr microkit_signal_cap;
 extern seL4_MessageInfo_t microkit_signal_msg;
 
 extern char microkit_trusted_loading_info[MICROKIT_TRUSTED_LOADING_INFO_LENGTH];
-extern char microkit_monitor_ossvc_database[MICROKIT_MONITOR_OSSVC_DATABASE_LENGTH];
-
 /* Symbols for error checking libmicrokit API calls. Patched by the Microkit tool
  * to set bits corresponding to valid channels for this PD. */
 extern seL4_Word microkit_irqs;
