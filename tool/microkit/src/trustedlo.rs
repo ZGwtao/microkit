@@ -17,7 +17,7 @@ pub const MAX_MAPPINGS: usize = MAX_CHANNELS;
 pub struct TSLDRMappingInfo {
     pub vaddr: u64,
     pub page: u64,
-    pub number_of_pages: u64,
+    pub page_num: u64,
     pub page_size: u64,
     pub rights: u64,
     pub attrs: u64,
@@ -27,7 +27,7 @@ impl Default for TSLDRMappingInfo {
         TSLDRMappingInfo {
             vaddr: 0,
             page: 0,
-            number_of_pages: 0,
+            page_num: 0,
             page_size: 0,
             rights: 0,
             attrs: 0,
@@ -125,14 +125,14 @@ impl DataNameCStr {
 #[derive(Copy, Clone)]
 pub struct SvcMappingInfo {
     pub vaddr: u64,
-    pub number_of_pages: u64,
+    pub page_num: u64,
     pub page_size: u64,
 }
 impl Default for SvcMappingInfo {
     fn default() -> Self {
         SvcMappingInfo {
             vaddr: 0,
-            number_of_pages: 0,
+            page_num: 0,
             page_size: 0,
         }
     }

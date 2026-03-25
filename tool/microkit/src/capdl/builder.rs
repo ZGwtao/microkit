@@ -685,7 +685,7 @@ pub fn build_capdl_spec(
                 pd.maps_opt.push(TSLDRMappingInfo {
                     vaddr: (map.vaddr),
                     page: (map_slot - BKC_CNODE_MAPPING_CAP),
-                    number_of_pages: (frames.len() as u64),
+                    page_num: (frames.len() as u64),
                     page_size: (page_size_bytes),
                     rights: (0),
                     attrs: (0)

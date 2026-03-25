@@ -250,7 +250,7 @@ pub fn patch_symbols_monitor_pd(
                 spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].mappings[map_idx] = TSLDRMappingInfo {
                     vaddr: map.vaddr,
                     page: map.page,
-                    number_of_pages: map.number_of_pages,
+                    page_num: map.page_num,
                     page_size: map.page_size,
                     rights: map.rights,
                     attrs: map.attrs,
@@ -280,7 +280,7 @@ pub fn patch_symbols_monitor_pd(
                     if let Some(gm) = c.maps_opt.iter().find(|gm| gm.vaddr == map.vaddr) {
                         protocon_os_services.array[svc_idx].mappings[map_idx] = SvcMappingInfo {
                             vaddr: gm.vaddr,
-                            number_of_pages: gm.number_of_pages,
+                            page_num: gm.page_num,
                             page_size: gm.page_size,
                         };
                     }
