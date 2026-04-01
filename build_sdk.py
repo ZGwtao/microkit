@@ -410,6 +410,11 @@ SUPPORTED_CONFIGS = (
                 "KernelArmExportPMUUser": True,
                 "KernelArmAbsMap": True,
             },
+            KernelArch.X86_64: {
+                "KernelExportPMCUser": True,
+                "KernelX86DangerousMSR": True,
+                "KernelX86AbsMap": True,
+            }
         },
     ),
     ConfigInfo(
@@ -429,6 +434,7 @@ SUPPORTED_CONFIGS = (
             KernelArch.X86_64: {
                 "KernelExportPMCUser": True,
                 "KernelX86DangerousMSR": True,
+                "KernelX86AbsMap": True,
             }
         },
     ),
