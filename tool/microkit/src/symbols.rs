@@ -214,7 +214,7 @@ pub fn patch_symbols_monitor_pd(
             let mut opt_channel = [0u8; MAX_CHANNELS];
             let mut opt_channel_attr = [0u8; MAX_CHANNELS];
 
-            for channel in system.channels.iter().filter(|c| c.optional) {
+            for channel in system.channels.iter().filter(|c| c.end_a.optional || c.end_b.optional) {
                 if channel.end_a.pd == curr_idx {
                     println!(
                         "Optional channel for PD '{}' found (id={})",

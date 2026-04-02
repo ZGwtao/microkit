@@ -229,13 +229,13 @@ pub struct ChannelEnd {
     pub notify: bool,
     pub pp: bool,
     pub setvar_id: Option<String>,
+    pub optional: bool,
 }
 
 #[derive(Debug)]
 pub struct Channel {
     pub end_a: ChannelEnd,
     pub end_b: ChannelEnd,
-    pub optional: bool,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -1456,7 +1456,7 @@ impl ChannelEnd {
             ));
         }
 
-        check_attributes(xml_sdf, node, &["pd", "id", "pp", "notify", "setvar_id"])?;
+        check_attributes(xml_sdf, node, &["pd", "id", "pp", "notify", "setvar_id", "optional"])?;
         let end_pd = checked_lookup(xml_sdf, node, "pd")?;
         let end_id = checked_lookup(xml_sdf, node, "id")?.parse::<i64>().unwrap();
 
@@ -1492,6 +1492,14 @@ impl ChannelEnd {
                 value_error(xml_sdf, node, "pp must be 'true' or 'false'".to_string())
             })?;
 
+        let optional = node
+            .attribute("optional")
+            .map(str_to_bool)
+            .unwrap_or(Some(false))
+            .ok_or_else(|| {
+                value_error(xml_sdf, node, "optional must be 'true' or 'false'".to_string())
+            })?;
+
         if let Some(pd_idx) = pds.iter().position(|pd| pd.name == end_pd) {
             let setvar_id = node.attribute("setvar_id").map(ToOwned::to_owned);
             Ok(ChannelEnd {
@@ -1500,6 +1508,7 @@ impl ChannelEnd {
                 notify,
                 pp,
                 setvar_id,
+                optional,
             })
         } else {
             Err(value_error(
@@ -1520,7 +1529,7 @@ impl Channel {
         node: &'a roxmltree::Node,
         pds: &[ProtectionDomain],
     ) -> Result<Channel, String> {
-        check_attributes(xml_sdf, node, &["optional"])?;
+        check_attributes(xml_sdf, node, &[])?;
 
         let [ref end_a, ref end_b] = node
             .children()
@@ -1535,18 +1544,6 @@ impl Channel {
             ));
         };
 
-        let optional = node
-            .attribute("optional")
-            .map(str_to_bool)
-            .unwrap_or(Some(false))
-            .ok_or_else(|| {
-                value_error(
-                    xml_sdf,
-                    node,
-                    "optional must be 'true' or 'false'".to_string(),
-                )
-            })?;
-
         if end_a.pp && end_b.pp {
             return Err(value_error(
                 xml_sdf,
@@ -1558,7 +1555,6 @@ impl Channel {
         Ok(Channel {
             end_a: end_a.clone(),
             end_b: end_b.clone(),
-            optional,
         })
     }
 }

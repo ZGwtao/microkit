@@ -1170,18 +1170,20 @@ pub fn build_capdl_spec(
             let pd_a_ntfn_cap_idx = PD_BASE_OUTPUT_NOTIFICATION_CAP + channel.end_a.id;
             let pd_a_ntfn_badge = 1 << channel.end_b.id;
             let pd_a_ntfn_cap = capdl_util_make_ntfn_cap(pd_b_ntfn_id, true, true, pd_a_ntfn_badge);
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                pd_a_cspace_id,
-                pd_a_ntfn_cap_idx as u32,
-                pd_a_ntfn_cap.clone(),
-            );
-            if channel.optional == true {
+
+            if channel.end_a.optional == true {
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container,
                     pd_a_bkc_id,
                     (BKC_CNODE_NOTIFICATION_CAP + channel.end_a.id) as u32,
                     pd_a_ntfn_cap,
+                );
+            } else {
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_a_cspace_id,
+                    pd_a_ntfn_cap_idx as u32,
+                    pd_a_ntfn_cap.clone(),
                 );
             }
         }
@@ -1190,18 +1192,20 @@ pub fn build_capdl_spec(
             let pd_b_ntfn_cap_idx = PD_BASE_OUTPUT_NOTIFICATION_CAP + channel.end_b.id;
             let pd_b_ntfn_badge = 1 << channel.end_a.id;
             let pd_b_ntfn_cap = capdl_util_make_ntfn_cap(pd_a_ntfn_id, true, true, pd_b_ntfn_badge);
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                pd_b_cspace_id,
-                pd_b_ntfn_cap_idx as u32,
-                pd_b_ntfn_cap.clone(),
-            );
-            if channel.optional == true {
+
+            if channel.end_b.optional == true {
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container,
                     pd_b_bkc_id,
                     (BKC_CNODE_NOTIFICATION_CAP + channel.end_b.id) as u32,
                     pd_b_ntfn_cap,
+                );
+            } else {
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_b_cspace_id,
+                    pd_b_ntfn_cap_idx as u32,
+                    pd_b_ntfn_cap.clone(),
                 );
             }
         }
@@ -1212,18 +1216,20 @@ pub fn build_capdl_spec(
             let pd_b_ep_id = *pd_id_to_ep_id.get(&channel.end_b.pd).unwrap();
             let pd_a_ep_cap =
                 capdl_util_make_endpoint_cap(pd_b_ep_id, true, true, true, pd_a_ep_badge);
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                pd_a_cspace_id,
-                pd_a_ep_cap_idx as u32,
-                pd_a_ep_cap.clone(),
-            );
-            if channel.optional == true {
+
+            if channel.end_a.optional == true {
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container,
                     pd_a_bkc_id,
                     (BKC_CNODE_PPC_CAP + channel.end_a.id) as u32,
                     pd_a_ep_cap,
+                );
+            } else {
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_a_cspace_id,
+                    pd_a_ep_cap_idx as u32,
+                    pd_a_ep_cap.clone(),
                 );
             }
         }
@@ -1234,18 +1240,20 @@ pub fn build_capdl_spec(
             let pd_a_ep_id = *pd_id_to_ep_id.get(&channel.end_a.pd).unwrap();
             let pd_b_ep_cap =
                 capdl_util_make_endpoint_cap(pd_a_ep_id, true, true, true, pd_b_ep_badge);
-            capdl_util_insert_cap_into_cspace(
-                &mut spec_container,
-                pd_b_cspace_id,
-                pd_b_ep_cap_idx as u32,
-                pd_b_ep_cap.clone(),
-            );
-            if channel.optional == true {
+
+            if channel.end_b.optional == true {
                 capdl_util_insert_cap_into_cspace(
                     &mut spec_container,
                     pd_b_bkc_id,
                     (BKC_CNODE_PPC_CAP + channel.end_b.id) as u32,
                     pd_b_ep_cap,
+                );
+            } else {
+                capdl_util_insert_cap_into_cspace(
+                    &mut spec_container,
+                    pd_b_cspace_id,
+                    pd_b_ep_cap_idx as u32,
+                    pd_b_ep_cap.clone(),
                 );
             }
         }
