@@ -17,18 +17,20 @@ typedef unsigned int microkit_child;
 typedef unsigned int microkit_ioport;
 typedef seL4_MessageInfo_t microkit_msginfo;
 
-#define MONITOR_EP 5
+#define RADIX_OFFSET (55)
+
+#define MONITOR_EP (5ULL << RADIX_OFFSET)
 /* Only valid in the 'benchmark' configuration */
-#define TCB_CAP 6
+#define TCB_CAP (6ULL << RADIX_OFFSET)
 /* Only valid when the PD has been configured to make SMC calls */
-#define ARM_SMC_CAP 7
-#define BASE_OUTPUT_NOTIFICATION_CAP 10
-#define BASE_ENDPOINT_CAP 74
-#define BASE_IRQ_CAP 138
-#define BASE_TCB_CAP 202
-#define BASE_VM_TCB_CAP 266
-#define BASE_VCPU_CAP 330
-#define BASE_IOPORT_CAP 394
+#define ARM_SMC_CAP (7ULL << RADIX_OFFSET)
+#define BASE_OUTPUT_NOTIFICATION_CAP (10ULL << RADIX_OFFSET)
+#define BASE_ENDPOINT_CAP (74ULL << RADIX_OFFSET)
+#define BASE_IRQ_CAP (138ULL << RADIX_OFFSET)
+#define BASE_TCB_CAP (202ULL << RADIX_OFFSET)
+#define BASE_VM_TCB_CAP (266ULL << RADIX_OFFSET)
+#define BASE_VCPU_CAP (330ULL << RADIX_OFFSET)
+#define BASE_IOPORT_CAP (394ULL << RADIX_OFFSET)
 
 #define MICROKIT_MAX_CHANNELS 62
 #define MICROKIT_MAX_CHANNEL_ID (MICROKIT_MAX_CHANNELS - 1)
@@ -102,7 +104,7 @@ static inline void microkit_notify(microkit_channel ch)
         return;
     }
 #endif
-    seL4_Signal(BASE_OUTPUT_NOTIFICATION_CAP + ch);
+    seL4_Signal((BASE_OUTPUT_NOTIFICATION_CAP + ch) << RADIX_OFFSET);
 }
 
 static inline void microkit_irq_ack(microkit_channel ch)
@@ -114,7 +116,7 @@ static inline void microkit_irq_ack(microkit_channel ch)
         microkit_dbg_puts("'\n");
         return;
     }
-    seL4_IRQHandler_Ack(BASE_IRQ_CAP + ch);
+    seL4_IRQHandler_Ack(((BASE_IRQ_CAP + ch) << RADIX_OFFSET));
 }
 
 static inline void microkit_pd_restart(microkit_child pd, seL4_Word entry_point)
@@ -129,7 +131,7 @@ static inline void microkit_pd_restart(microkit_child pd, seL4_Word entry_point)
 #error "Unsupported architecture for 'microkit_pd_restart'"
 #endif
     err = seL4_TCB_WriteRegisters(
-              BASE_TCB_CAP + pd,
+              ((BASE_TCB_CAP + pd) << RADIX_OFFSET),
               seL4_True,
               0, /* No flags */
               1, /* writing 1 register */
@@ -145,7 +147,7 @@ static inline void microkit_pd_restart(microkit_child pd, seL4_Word entry_point)
 static inline void microkit_pd_stop(microkit_child pd)
 {
     seL4_Error err;
-    err = seL4_TCB_Suspend(BASE_TCB_CAP + pd);
+    err = seL4_TCB_Suspend(((BASE_TCB_CAP + pd) << RADIX_OFFSET));
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_pd_stop: error writing TCB registers\n");
         microkit_internal_crash(err);
@@ -163,7 +165,7 @@ static inline microkit_msginfo microkit_ppcall(microkit_channel ch, microkit_msg
         return seL4_MessageInfo_new(0, 0, 0, 0);
     }
 #endif
-    return seL4_Call(BASE_ENDPOINT_CAP + ch, msginfo);
+    return seL4_Call(((BASE_ENDPOINT_CAP + ch) << RADIX_OFFSET), msginfo);
 }
 
 static inline microkit_msginfo microkit_msginfo_new(seL4_Word label, seL4_Uint16 count)
@@ -205,7 +207,7 @@ static inline void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_po
 #error "unknown architecture for 'microkit_vcpu_restart'"
 #endif
     err = seL4_TCB_WriteRegisters(
-              BASE_VM_TCB_CAP + vcpu,
+              ((BASE_VM_TCB_CAP + vcpu) << RADIX_OFFSET),
               seL4_True,
               0, /* No flags */
               1, /* writing 1 register */
@@ -221,7 +223,7 @@ static inline void microkit_vcpu_restart(microkit_child vcpu, seL4_Word entry_po
 static inline void microkit_vcpu_stop(microkit_child vcpu)
 {
     seL4_Error err;
-    err = seL4_TCB_Suspend(BASE_VM_TCB_CAP + vcpu);
+    err = seL4_TCB_Suspend(((BASE_VM_TCB_CAP + vcpu) << RADIX_OFFSET));
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_vcpu_stop: error suspending TCB\n");
         microkit_internal_crash(err);
@@ -234,7 +236,7 @@ static inline void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16
                                                 seL4_Uint8 group, seL4_Uint8 index)
 {
     seL4_Error err;
-    err = seL4_ARM_VCPU_InjectIRQ(BASE_VCPU_CAP + vcpu, irq, priority, group, index);
+    err = seL4_ARM_VCPU_InjectIRQ(((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET), irq, priority, group, index);
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_vcpu_arm_inject_irq: error injecting IRQ\n");
         microkit_internal_crash(err);
@@ -244,7 +246,7 @@ static inline void microkit_vcpu_arm_inject_irq(microkit_child vcpu, seL4_Uint16
 static inline void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq)
 {
     seL4_Error err;
-    err = seL4_ARM_VCPU_AckVPPI(BASE_VCPU_CAP + vcpu, irq);
+    err = seL4_ARM_VCPU_AckVPPI(((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET), irq);
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_vcpu_arm_ack_vppi: error acking VPPI\n");
         microkit_internal_crash(err);
@@ -254,7 +256,7 @@ static inline void microkit_vcpu_arm_ack_vppi(microkit_child vcpu, seL4_Word irq
 static inline seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Word reg)
 {
     seL4_ARM_VCPU_ReadRegs_t ret;
-    ret = seL4_ARM_VCPU_ReadRegs(BASE_VCPU_CAP + vcpu, reg);
+    ret = seL4_ARM_VCPU_ReadRegs(((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET), reg);
     if (ret.error != seL4_NoError) {
         microkit_dbg_puts("microkit_vcpu_arm_read_reg: error reading vCPU register\n");
         microkit_internal_crash(ret.error);
@@ -266,7 +268,7 @@ static inline seL4_Word microkit_vcpu_arm_read_reg(microkit_child vcpu, seL4_Wor
 static inline void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word reg, seL4_Word value)
 {
     seL4_Error err;
-    err = seL4_ARM_VCPU_WriteRegs(BASE_VCPU_CAP + vcpu, reg, value);
+    err = seL4_ARM_VCPU_WriteRegs(((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET), reg, value);
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_vcpu_arm_write_reg: error writing vCPU register\n");
         microkit_internal_crash(err);
@@ -278,7 +280,7 @@ static inline void microkit_vcpu_arm_write_reg(microkit_child vcpu, seL4_Word re
 static inline void microkit_arm_smc_call(seL4_ARM_SMCContext *args, seL4_ARM_SMCContext *response)
 {
     seL4_Error err;
-    err = seL4_ARM_SMC_Call(ARM_SMC_CAP, args, response);
+    err = seL4_ARM_SMC_Call(((ARM_SMC_CAP) << RADIX_OFFSET), args, response);
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_arm_smc_call: error making SMC call\n");
         microkit_internal_crash(err);
@@ -298,7 +300,7 @@ static inline void microkit_x86_ioport_write_8(microkit_ioport ioport_id, seL4_W
     }
 
     seL4_Error err;
-    err = seL4_X86_IOPort_Out8(BASE_IOPORT_CAP + ioport_id, port_addr, data);
+    err = seL4_X86_IOPort_Out8(((BASE_IOPORT_CAP + ioport_id) << RADIX_OFFSET), port_addr, data);
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_ioport_write_8: error writing data\n");
         microkit_internal_crash(err);
@@ -316,7 +318,7 @@ static inline void microkit_x86_ioport_write_16(microkit_ioport ioport_id, seL4_
     }
 
     seL4_Error err;
-    err = seL4_X86_IOPort_Out16(BASE_IOPORT_CAP + ioport_id, port_addr, data);
+    err = seL4_X86_IOPort_Out16(((BASE_IOPORT_CAP + ioport_id) << RADIX_OFFSET), port_addr, data);
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_ioport_write_16: error writing data\n");
         microkit_internal_crash(err);
@@ -334,7 +336,7 @@ static inline void microkit_x86_ioport_write_32(microkit_ioport ioport_id, seL4_
     }
 
     seL4_Error err;
-    err = seL4_X86_IOPort_Out32(BASE_IOPORT_CAP + ioport_id, port_addr, data);
+    err = seL4_X86_IOPort_Out32(((BASE_IOPORT_CAP + ioport_id) << RADIX_OFFSET), port_addr, data);
     if (err != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_ioport_write_32: error writing data\n");
         microkit_internal_crash(err);
@@ -352,7 +354,7 @@ static inline seL4_Uint8 microkit_x86_ioport_read_8(microkit_ioport ioport_id, s
     }
 
     seL4_X86_IOPort_In8_t ret;
-    ret = seL4_X86_IOPort_In8(BASE_IOPORT_CAP + ioport_id, port_addr);
+    ret = seL4_X86_IOPort_In8(((BASE_IOPORT_CAP + ioport_id) << RADIX_OFFSET), port_addr);
     if (ret.error != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_ioport_read_8: error reading data\n");
         microkit_internal_crash(ret.error);
@@ -372,7 +374,7 @@ static inline seL4_Uint16 microkit_x86_ioport_read_16(microkit_ioport ioport_id,
     }
 
     seL4_X86_IOPort_In16_t ret;
-    ret = seL4_X86_IOPort_In16(BASE_IOPORT_CAP + ioport_id, port_addr);
+    ret = seL4_X86_IOPort_In16(((BASE_IOPORT_CAP + ioport_id) << RADIX_OFFSET), port_addr);
     if (ret.error != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_ioport_read_16: error reading data\n");
         microkit_internal_crash(ret.error);
@@ -392,7 +394,7 @@ static inline seL4_Uint32 microkit_x86_ioport_read_32(microkit_ioport ioport_id,
     }
 
     seL4_X86_IOPort_In32_t ret;
-    ret = seL4_X86_IOPort_In32(BASE_IOPORT_CAP + ioport_id, port_addr);
+    ret = seL4_X86_IOPort_In32(((BASE_IOPORT_CAP + ioport_id) << RADIX_OFFSET), port_addr);
     if (ret.error != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_ioport_read_32: error reading data\n");
         microkit_internal_crash(ret.error);
@@ -406,7 +408,7 @@ static inline seL4_Uint32 microkit_x86_ioport_read_32(microkit_ioport ioport_id,
 static inline seL4_Word microkit_vcpu_x86_read_vmcs(microkit_child vcpu, seL4_Word field)
 {
     seL4_X86_VCPU_ReadVMCS_t ret;
-    ret = seL4_X86_VCPU_ReadVMCS(BASE_VCPU_CAP + vcpu, field);
+    ret = seL4_X86_VCPU_ReadVMCS((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET, field);
     if (ret.error != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_read_vmcs: error reading data\n");
         microkit_internal_crash(ret.error);
@@ -418,7 +420,7 @@ static inline seL4_Word microkit_vcpu_x86_read_vmcs(microkit_child vcpu, seL4_Wo
 static inline void microkit_vcpu_x86_write_vmcs(microkit_child vcpu, seL4_Word field, seL4_Word value)
 {
     seL4_X86_VCPU_WriteVMCS_t ret;
-    ret = seL4_X86_VCPU_WriteVMCS(BASE_VCPU_CAP + vcpu, field, value);
+    ret = seL4_X86_VCPU_WriteVMCS((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET, field, value);
     if (ret.error != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_write_vmcs: error writing data\n");
         microkit_internal_crash(ret.error);
@@ -428,7 +430,7 @@ static inline void microkit_vcpu_x86_write_vmcs(microkit_child vcpu, seL4_Word f
 static inline seL4_Word microkit_vcpu_x86_read_msr(microkit_child vcpu, seL4_Word field)
 {
     seL4_X86_VCPU_ReadMSR_t ret;
-    ret = seL4_X86_VCPU_ReadMSR(BASE_VCPU_CAP + vcpu, field);
+    ret = seL4_X86_VCPU_ReadMSR((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET, field);
     if (ret.error != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_read_msr: error reading data\n");
         microkit_internal_crash(ret.error);
@@ -440,7 +442,7 @@ static inline seL4_Word microkit_vcpu_x86_read_msr(microkit_child vcpu, seL4_Wor
 static inline void microkit_vcpu_x86_write_msr(microkit_child vcpu, seL4_Word field, seL4_Word value)
 {
     seL4_X86_VCPU_WriteMSR_t ret;
-    ret = seL4_X86_VCPU_WriteMSR(BASE_VCPU_CAP + vcpu, field, value);
+    ret = seL4_X86_VCPU_WriteMSR((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET, field, value);
     if (ret.error != seL4_NoError) {
         microkit_dbg_puts("microkit_x86_write_msr: error writing data\n");
         microkit_internal_crash(ret.error);
@@ -459,7 +461,7 @@ static inline void microkit_vcpu_x86_enable_ioport(microkit_child vcpu, microkit
     }
 
     int ret;
-    ret = seL4_X86_VCPU_EnableIOPort(BASE_VCPU_CAP + vcpu, BASE_IOPORT_CAP + ioport_id, port_addr, port_addr + length - 1);
+    ret = seL4_X86_VCPU_EnableIOPort((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET, (BASE_IOPORT_CAP + ioport_id) << RADIX_OFFSET, port_addr, port_addr + length - 1);
     if (ret != seL4_NoError) {
         microkit_dbg_puts("microkit_vcpu_x86_enable_ioport: error enabling I/O Port\n");
         microkit_internal_crash(ret);
@@ -469,7 +471,7 @@ static inline void microkit_vcpu_x86_enable_ioport(microkit_child vcpu, microkit
 static inline void microkit_vcpu_x86_disable_ioport(microkit_child vcpu, seL4_Word port_addr, seL4_Word length)
 {
     int ret;
-    ret = seL4_X86_VCPU_DisableIOPort(BASE_VCPU_CAP + vcpu, port_addr, port_addr + length - 1);
+    ret = seL4_X86_VCPU_DisableIOPort((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET, port_addr, port_addr + length - 1);
     if (ret != seL4_NoError) {
         microkit_dbg_puts("microkit_vcpu_x86_disable_ioport: error disabling I/O Port\n");
         microkit_internal_crash(ret);
@@ -479,7 +481,7 @@ static inline void microkit_vcpu_x86_disable_ioport(microkit_child vcpu, seL4_Wo
 static inline void microkit_vcpu_x86_write_regs(microkit_child vcpu, seL4_VCPUContext *regs)
 {
     int ret;
-    ret = seL4_X86_VCPU_WriteRegisters(BASE_VCPU_CAP + vcpu, regs);
+    ret = seL4_X86_VCPU_WriteRegisters((BASE_VCPU_CAP + vcpu) << RADIX_OFFSET, regs);
     if (ret != seL4_NoError) {
         microkit_dbg_puts("microkit_vcpu_x86_write_regs: error writing vCPU registers\n");
         microkit_internal_crash(ret);
@@ -499,7 +501,7 @@ static inline void microkit_deferred_notify(microkit_channel ch)
     }
     microkit_have_signal = seL4_True;
     microkit_signal_msg = seL4_MessageInfo_new(0, 0, 0, 0);
-    microkit_signal_cap = (BASE_OUTPUT_NOTIFICATION_CAP + ch);
+    microkit_signal_cap = ((BASE_OUTPUT_NOTIFICATION_CAP + ch) << RADIX_OFFSET);
 }
 
 static inline void microkit_deferred_irq_ack(microkit_channel ch)
@@ -513,5 +515,5 @@ static inline void microkit_deferred_irq_ack(microkit_channel ch)
     }
     microkit_have_signal = seL4_True;
     microkit_signal_msg = seL4_MessageInfo_new(IRQAckIRQ, 0, 0, 0);
-    microkit_signal_cap = (BASE_IRQ_CAP + ch);
+    microkit_signal_cap = ((BASE_IRQ_CAP + ch) << RADIX_OFFSET);
 }

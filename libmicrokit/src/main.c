@@ -12,8 +12,10 @@
 
 #include <microkit.h>
 
-#define INPUT_CAP 1
-#define REPLY_CAP 4
+#define RADIX_OFFSET (55)
+
+#define INPUT_CAP (1ULL << RADIX_OFFSET)
+#define REPLY_CAP (4ULL << RADIX_OFFSET)
 
 #define PD_MASK 0xff
 #define CHANNEL_MASK 0x3f

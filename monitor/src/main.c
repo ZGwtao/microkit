@@ -43,12 +43,14 @@
 #define MAX_PDS 64
 #define MAX_NAME_LEN 64
 
-#define FAULT_EP_CAP 1
-#define REPLY_CAP 2
-#define BASE_PD_TCB_CAP 10
-#define BASE_VM_TCB_CAP 74
-#define BASE_SCHED_CONTEXT_CAP 138
-#define BASE_NOTIFICATION_CAP 202
+#define RADIX_OFFSET (55)
+
+#define FAULT_EP_CAP (1ULL << RADIX_OFFSET)
+#define REPLY_CAP (2ULL << RADIX_OFFSET)
+#define BASE_PD_TCB_CAP (10ULL << RADIX_OFFSET)
+#define BASE_VM_TCB_CAP (74ULL << RADIX_OFFSET)
+#define BASE_SCHED_CONTEXT_CAP (138ULL << RADIX_OFFSET)
+#define BASE_NOTIFICATION_CAP (202ULL << RADIX_OFFSET)
 
 extern seL4_IPCBuffer __sel4_ipc_buffer_obj;
 seL4_IPCBuffer *__sel4_ipc_buffer = &__sel4_ipc_buffer_obj;

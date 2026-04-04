@@ -484,7 +484,7 @@ pub fn build_capdl_spec(
         ]
         .to_vec(),
     );
-    let mon_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
+    let mon_guard_size = 0 as u64;
     let mon_cnode_cap = capdl_util_make_cnode_cap(mon_cnode_obj_id, 0, mon_guard_size as u8);
 
     // Create monitor stack frame
@@ -1043,7 +1043,7 @@ pub fn build_capdl_spec(
             PD_CAP_BITS,
             caps_to_insert_to_pd_cspace,
         );
-        let pd_guard_size = kernel_config.cap_address_bits - PD_CAP_BITS as u64;
+        let pd_guard_size = 0 as u64;
         let pd_cnode_cap = capdl_util_make_cnode_cap(pd_cnode_obj_id, 0, pd_guard_size as u8);
         caps_to_bind_to_tcb.push(capdl_util_make_cte(
             TcbBoundSlot::CSpace as u32,
@@ -1084,7 +1084,11 @@ pub fn build_capdl_spec(
             PD_CAP_BITS,
             caps_to_insert_to_pd_bkc,
         );
-        let bkc_cnode_cap = capdl_util_make_cnode_cap(bkc_cnode_obj_id, 0, pd_guard_size as u8);
+        let bkc_cnode_cap = capdl_util_make_cnode_cap(
+            bkc_cnode_obj_id,
+            0,
+            (kernel_config.cap_address_bits - (PD_CAP_BITS as u64) * 2) as u8
+        );
         if let Some(parent_idx) = pd.parent {
             if is_dyn {
                 // Allow the parent PD to access the working CNode of the dynamic PD
