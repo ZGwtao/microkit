@@ -581,12 +581,12 @@ pub fn build_capdl_spec(
 
         // In the benchmark configuration, we allow PDs to access their own TCB.
         // This is necessary for accessing kernel's benchmark API.
-        if kernel_config.benchmark {
+        // if kernel_config.benchmark {
             caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
                 PD_TCB_CAP_IDX as u32,
                 capdl_util_make_tcb_cap(pd_tcb_obj_id),
             ));
-        }
+        // }
 
         // Allow PD to access their own VSpace for ops such as cache cleaning on ARM.
         caps_to_insert_to_pd_cspace.push(capdl_util_make_cte(
