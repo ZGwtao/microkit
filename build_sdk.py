@@ -249,9 +249,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "odroidc4",
             "KernelArmVtimerUpdateVOffset": False,
             "KernelEnableMultikernelSupport": True,
-            # TODO: Derive from device tree?
-            # "KernelMultikernelNumCPUs": 4,
-            "KernelMultikernelNumCPUs": 2,
+            "KernelMultikernelNumCPUs": 4,
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
@@ -426,10 +424,13 @@ SUPPORTED_CONFIGS = (
         name="release",
         debug=False,
         kernel_options={
-            "KernelVerificationBuild": False,
-            "KernelDebugBuild": True,
+            "HardwareDebugAPI": False,
         },
-        kernel_options_arch={},
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                "KernelArmExportPMUUser": True,
+            },
+        },
     ),
     ConfigInfo(
         name="debug",
@@ -439,7 +440,11 @@ SUPPORTED_CONFIGS = (
             "KernelPrinting": True,
             "KernelVerificationBuild": False
         },
-        kernel_options_arch={},
+        kernel_options_arch={
+            KernelArch.AARCH64: {
+                "KernelArmExportPMUUser": True,
+            },
+        },
     ),
     ConfigInfo(
         name="benchmark",
@@ -449,6 +454,7 @@ SUPPORTED_CONFIGS = (
             "KernelVerificationBuild": False,
             "KernelBenchmarks": "track_utilisation",
             "KernelSignalFastpath": True,
+            "HardwareDebugAPI": False,
         },
         kernel_options_arch={
             KernelArch.AARCH64: {
