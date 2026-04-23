@@ -249,7 +249,7 @@ SUPPORTED_BOARDS = (
             "KernelPlatform": "odroidc4",
             "KernelArmVtimerUpdateVOffset": False,
             "KernelEnableMultikernelSupport": True,
-            "KernelMultikernelNumCPUs": 4,
+            "KernelMultikernelNumCPUs": 2,
         } | DEFAULT_KERNEL_OPTIONS_AARCH64,
     ),
     BoardInfo(
