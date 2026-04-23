@@ -3,15 +3,15 @@
 //
 // SPDX-License-Identifier: BSD-2-Clause
 //
-use crate::elf::{ElfFile, ElfSegmentData};
+use crate::elf::{ElfFile};
 use crate::sel4::{Arch, Config, seL4_KernelBootInfo, seL4_KernelBoot_KernelRegion, seL4_KernelBoot_RamRegion,
     seL4_KernelBoot_RootTaskRegion, seL4_KernelBoot_ReservedRegion, SEL4_KERNEL_BOOT_INFO_MAGIC, SEL4_KERNEL_BOOT_INFO_VERSION_0};
-use crate::uimage::uimage_serialise;
+// use crate::uimage::uimage_serialise;
 use crate::capdl::initialiser::CapDLInitialiser;
-use crate::util::{mask, mb, round_up, struct_to_bytes};
+use crate::util::{mask, struct_to_bytes};
 use std::fs::File;
 use std::io::{BufWriter, Write};
-use std::ops::Range;
+// use std::ops::Range;
 use std::path::Path;
 use std::iter::zip;
 use std::mem;
@@ -568,7 +568,7 @@ impl<'a> Loader<'a> {
     //     loader_elf
     // }
 
-    pub fn write_elf(&self, path: &Path) {
+    pub fn write_elf(&self, _path: &Path) {
         // let loader_elf = self.convert_to_elf(path);
 
         // match loader_elf.reserialise(path) {
@@ -578,7 +578,7 @@ impl<'a> Loader<'a> {
         panic!("We are only building a binary image for now!\n");
     }
 
-    pub fn write_uimage(&self, path: &Path) {
+    pub fn write_uimage(&self, _path: &Path) {
         // let executable_payload = self.to_bytes();
         // let entry_32: u32 = match <u64 as TryInto<u32>>::try_into(self.entry) {
         //     Ok(entry_32) => entry_32,

@@ -27,10 +27,10 @@ use crate::{
     elf::ElfFile,
     sdf::{
         CpuCore, SysMap, SysMapPerms, SystemDescription, BUDGET_DEFAULT, MONITOR_PD_NAME,
-        MONITOR_PRIORITY, SysMemoryRegion, SysMemoryRegionKind, ChannelEnd, SysIrq,
-        SysIrqKind, ProtectionDomain, Channel
+        MONITOR_PRIORITY, SysMemoryRegion, ChannelEnd, SysIrq,
+        SysIrqKind, ProtectionDomain,
     },
-    sel4::{Arch, Config, PageSize, ArmGicVersion, FullSystemState, ArmRiscvIrqTrigger},
+    sel4::{Arch, Config, PageSize, FullSystemState, ArmRiscvIrqTrigger},
     util::{ranges_overlap, round_down, round_up},
 };
 
@@ -187,7 +187,7 @@ impl CapDLSpecContainer {
         &mut self,
         sel4_config: &Config,
         pd_name: &str,
-        pd_cpu: CpuCore,
+        _pd_cpu: CpuCore,
         elf: &ElfFile,
     ) -> Result<ObjectId, String> {
         // We assumes that ELFs and PDs have a one-to-one relationship. So for each ELF we create a VSpace.
@@ -1216,7 +1216,7 @@ pub fn build_capdl_spec(
                 // to create another irq handler and bind a notification to receive
                 // the interrupts.
                 println!("Creating an irq handler for irq {} on core {}", irq.id, cpu_id);
-                let irq_handle_cap = create_irq_handler_cap_no_ntfn(
+                let _irq_handle_cap = create_irq_handler_cap_no_ntfn(
                     &mut spec_container,
                     kernel_config,
                     &other_core_pd.name,

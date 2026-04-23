@@ -86,27 +86,27 @@ pub const SEL4_KERNEL_BOOT_INFO_MAGIC: u32 = 0x73654c34;  /* "seL4" */
 
 pub const SEL4_KERNEL_BOOT_INFO_VERSION_0: u8 = 0;        /* Version 0 */
 
-fn kernel_self_mem(kernel_elf: &ElfFile) -> MemoryRegion {
-    let segments = kernel_elf.loadable_segments();
-    let base = segments[0].phys_addr;
-    let (ki_end_v, _) = kernel_elf
-        .find_symbol("ki_end")
-        .expect("Could not find 'ki_end' symbol");
-    let ki_end_p = ki_end_v - segments[0].virt_addr + base;
+// fn kernel_self_mem(kernel_elf: &ElfFile) -> MemoryRegion {
+//     let segments = kernel_elf.loadable_segments();
+//     let base = segments[0].phys_addr;
+//     let (ki_end_v, _) = kernel_elf
+//         .find_symbol("ki_end")
+//         .expect("Could not find 'ki_end' symbol");
+//     let ki_end_p = ki_end_v - segments[0].virt_addr + base;
 
-    MemoryRegion::new(base, ki_end_p)
-}
+//     MemoryRegion::new(base, ki_end_p)
+// }
 
-fn kernel_boot_mem(kernel_elf: &ElfFile) -> MemoryRegion {
-    let segments = kernel_elf.loadable_segments();
-    let base = segments[0].phys_addr;
-    let (ki_boot_end_v, _) = kernel_elf
-        .find_symbol("ki_boot_end")
-        .expect("Could not find 'ki_boot_end' symbol");
-    let ki_boot_end_p = ki_boot_end_v - segments[0].virt_addr + base;
+// fn kernel_boot_mem(kernel_elf: &ElfFile) -> MemoryRegion {
+//     let segments = kernel_elf.loadable_segments();
+//     let base = segments[0].phys_addr;
+//     let (ki_boot_end_v, _) = kernel_elf
+//         .find_symbol("ki_boot_end")
+//         .expect("Could not find 'ki_boot_end' symbol");
+//     let ki_boot_end_p = ki_boot_end_v - segments[0].virt_addr + base;
 
-    MemoryRegion::new(base, ki_boot_end_p)
-}
+//     MemoryRegion::new(base, ki_boot_end_p)
+// }
 
 pub fn kernel_calculate_virt_image(kernel_elf: &ElfFile) -> MemoryRegion {
     let kernel_first_vaddr = kernel_elf
@@ -290,7 +290,7 @@ fn kernel_partial_boot(
     let mut start = 0;
     for reserved_reg in reserved_regions.regions.iter() {
         // @kwinter: Why do we need this edge case?
-        if (reserved_reg.base != 0) {
+        if reserved_reg.base != 0 {
             device_memory.insert_region(start, reserved_reg.base);
         }
         start = reserved_reg.end;

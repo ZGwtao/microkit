@@ -16,7 +16,7 @@ use microkit_tool::capdl::packaging::pack_spec_into_initial_task;
 use microkit_tool::capdl::CapDLSpecContainer;
 use microkit_tool::elf::ElfFile;
 use microkit_tool::loader::Loader;
-use microkit_tool::report::write_report;
+// use microkit_tool::report::write_report;
 use microkit_tool::sdf::{parse, SysMemoryRegion, SysMemoryRegionPaddr, CpuCore,
     ProtectionDomain};
 use microkit_tool::sel4::{
@@ -39,10 +39,10 @@ const MAX_BUILD_ITERATION: usize = 3;
 // When building for x86, the kernel is copied from the SDK release package to the same
 // directory as the output boot module image, as Multiboot want them as
 // separate images.
-const KERNEL_COPY_FILENAME: &str = "sel4.elf";
+// const KERNEL_COPY_FILENAME: &str = "sel4.elf";
 // The `-kernel` argument of 'qemu-system-x86_64' doesn't accept a 64-bit image, so we
 // also copy the 32-bit version that was prepared by build_sdk.py for convenience.
-const KERNEL32_COPY_FILENAME: &str = "sel4_32.elf";
+// const KERNEL32_COPY_FILENAME: &str = "sel4_32.elf";
 
 fn get_full_path(path: &Path, search_paths: &Vec<PathBuf>) -> Option<PathBuf> {
     for search_path in search_paths {
@@ -261,7 +261,7 @@ impl<'a> Args<'a> {
             system: system.unwrap(),
             board: board.unwrap(),
             config: config.unwrap(),
-            report,
+            report: report,
             capdl_json,
             output,
             search_paths,
@@ -589,7 +589,8 @@ fn main() -> Result<(), String> {
         "Microkit tool has various assumptions about the word size being 64-bits."
     );
 
-    let mut system = match parse(args.system, &xml, &kernel_config) {
+    // let mut system = match parse(args.system, &xml, &kernel_config) {
+    let system = match parse(args.system, &xml, &kernel_config) {
         Ok(system) => system,
         Err(err) => {
             eprintln!("{err}");
@@ -598,6 +599,18 @@ fn main() -> Result<(), String> {
     };
 
     let capdl_initialiser_elf = ElfFile::from_path(&capdl_init_elf_path).unwrap();
+
+    // TODO
+    // + emulate pagetable structure for all PDs
+    // + try allocating physical addresses for shared pagetables
+    // + populate the pagetable structure resource usage to each core
+    //
+    // We need to calculate how many memory the shared pagetables use on each core
+    // and once this is finished, subtract the result from reserved region
+    // Also, for each pagetable structure, tag each pagetable object with an address
+
+
+
 
     // ********************************************************************************************************************************************************
 
@@ -699,7 +712,7 @@ fn main() -> Result<(), String> {
         // if there are Memory Regions without a paddr but subject to setvar region_paddr.
         let mut iteration = 0;
         let mut spec_need_refinement = true;
-        let mut system_built = false;
+        // let mut system_built = false;
         while spec_need_refinement && iteration < MAX_BUILD_ITERATION {
             spec_need_refinement = false;
 

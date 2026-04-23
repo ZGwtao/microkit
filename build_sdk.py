@@ -889,7 +889,7 @@ def main() -> None:
     for board in selected_boards:
         elaborated_configs = elaborate_all_board_configs(board)
 
-        print(f"\n\n\n-------------------------------\n These are the elaborated configs: {elaborated_configs}\n\n\n\n\n")
+        # print(f"\n\n\n-------------------------------\n These are the elaborated configs: {elaborated_configs}\n\n\n\n\n")
 
         if args.configs is not None:
             elaborated_config_names = frozenset(config.name for config in elaborated_configs)

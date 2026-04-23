@@ -1852,8 +1852,9 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         }
     }
 
-    let mut pds = pd_flatten(&xml_sdf, root_pds)?;
-
+    // let mut pds = pd_flatten(&xml_sdf, root_pds)?;
+    let pds = pd_flatten(&xml_sdf, root_pds)?;
+    
     for node in channel_nodes {
         let ch = Channel::from_xml(&xml_sdf, &node, &pds)?;
 

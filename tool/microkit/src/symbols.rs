@@ -8,7 +8,7 @@ use std::{cmp::min, collections::HashMap, collections::BTreeMap};
 
 use crate::{
     elf::ElfFile,
-    sdf::{self, SysMemoryRegion, SystemDescription, CpuCore, ChannelEnd, ProtectionDomain},
+    sdf::{self, SysMemoryRegion, SystemDescription, ChannelEnd, ProtectionDomain},
     sel4::{Arch, Config},
     util::{monitor_serialise_names, monitor_serialise_u64_vec},
     MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
