@@ -86,7 +86,6 @@ fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct SysPageTable {
     pub name: String,
-    pub paddr: Option<u64>,
     pub text_pos: roxmltree::TextPos,
 }
 
@@ -385,15 +384,10 @@ impl ExecutionContext for VirtualMachine {
 
 impl SysPageTable {
     fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<SysPageTable, String> {
-        check_attributes(xml_sdf, node, &["name", "paddr"])?;
+        check_attributes(xml_sdf, node, &["name"])?;
         let name = checked_lookup(xml_sdf, node, "name")?.to_string();
-        let paddr = checked_lookup(xml_sdf, node, "paddr")
-            .ok()
-            .map(|s| sdf_parse_number(s, node))
-            .transpose()?;
         Ok(SysPageTable {
             name,
-            paddr,
             text_pos: xml_sdf.doc.text_pos_at(node.range().start),
         })
     }
@@ -1690,61 +1684,14 @@ fn checked_lookup<'a>(
 
 fn check_pagetables(
     xml_sdf: &XmlSystemDescription,
-    mrs: &[SysMemoryRegion],
     pagetables: &[SysPageTable],
 ) -> Result<(), String> {
     let mut seen_names: HashMap<&str, roxmltree::TextPos> = HashMap::new();
-    let mut seen_paddrs: HashMap<u64, (&str, roxmltree::TextPos)> = HashMap::new();
-
     for pt in pagetables {
         if let Some(prev_pos) = seen_names.insert(pt.name.as_str(), pt.text_pos) {
             return Err(format!(
                 "Error: duplicate pagetable name '{}': {} (previously defined at {})",
                 pt.name,
-                loc_string(xml_sdf, pt.text_pos),
-                loc_string(xml_sdf, prev_pos),
-            ));
-        }
-
-        let Some(pt_paddr) = pt.paddr else {
-            continue;
-        };
-
-        for mr in mrs {
-            if let Some(mr_paddr) = mr.paddr() {
-                let mr_end = mr_paddr
-                    .checked_add(mr.size)
-                    .ok_or_else(|| {
-                        format!(
-                            "Error: memory region '{}' address range overflows u64: {}",
-                            mr.name,
-                            loc_string(
-                                xml_sdf,
-                                mr.text_pos.unwrap_or(pt.text_pos),
-                            )
-                        )
-                    })?;
-
-                if pt_paddr >= mr_paddr && pt_paddr < mr_end {
-                    return Err(format!(
-                        "Error: pagetable '{}' paddr {:#x} overlaps memory region '{}' [{:#x}..{:#x}): {}",
-                        pt.name,
-                        pt_paddr,
-                        mr.name,
-                        mr_paddr,
-                        mr_end,
-                        loc_string(xml_sdf, pt.text_pos),
-                    ));
-                }
-            }
-        }
-
-        if let Some((prev_name, prev_pos)) = seen_paddrs.insert(pt_paddr, (pt.name.as_str(), pt.text_pos)) {
-            return Err(format!(
-                "Error: pagetable '{}' paddr {:#x} conflicts with pagetable '{}': {} (previously defined at {})",
-                pt.name,
-                pt_paddr,
-                prev_name,
                 loc_string(xml_sdf, pt.text_pos),
                 loc_string(xml_sdf, prev_pos),
             ));
@@ -2080,7 +2027,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         }
     }
 
-    check_pagetables(&xml_sdf, &mrs, &pagetables)?;
+    check_pagetables(&xml_sdf, &pagetables)?;
 
     let mut vms: Vec<&String> = vec![];
     for pd in pds.values() {
