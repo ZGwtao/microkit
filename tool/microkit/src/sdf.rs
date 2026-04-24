@@ -260,7 +260,7 @@ pub struct Channel {
     pub end_b: ChannelEnd,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CpuCore(pub u8);
 
 impl Display for CpuCore {
@@ -1754,6 +1754,67 @@ fn check_pagetables(
     Ok(())
 }
 
+fn check_pd_pagetable_safety(
+    xml_sdf: &XmlSystemDescription,
+    pds: &[ProtectionDomain],
+) -> Result<(), String> {
+    use std::collections::HashMap;
+
+    let mut pagetable_to_program: HashMap<&str, (&std::path::Path, roxmltree::TextPos, &str)> =
+        HashMap::new();
+    let mut cpu_pagetable_to_pd: HashMap<(CpuCore, &str), (roxmltree::TextPos, &str)> =
+        HashMap::new();
+
+    for pd in pds {
+        let Some(pagetable_name) = pd.pagetable.as_deref() else {
+            continue;
+        };
+
+        let pd_pos = pd
+            .text_pos
+            .expect("ProtectionDomain text_pos should be available after parsing");
+
+        if let Some((prev_program, prev_pos, prev_pd_name)) =
+            pagetable_to_program.get(pagetable_name)
+        {
+            if *prev_program != pd.program_image.as_path() {
+                return Err(format!(
+                    "Error: protection domains '{}' and '{}' use the same pagetable '{}' but different program images ('{}' and '{}'): {} (previously defined at {})",
+                    prev_pd_name,
+                    pd.name,
+                    pagetable_name,
+                    prev_program.display(),
+                    pd.program_image.display(),
+                    loc_string(xml_sdf, pd_pos),
+                    loc_string(xml_sdf, *prev_pos),
+                ));
+            }
+        } else {
+            pagetable_to_program.insert(
+                pagetable_name,
+                (pd.program_image.as_path(), pd_pos, pd.name.as_str()),
+            );
+        }
+
+        let key = (pd.cpu, pagetable_name);
+        if let Some((prev_pos, prev_pd_name)) = cpu_pagetable_to_pd.get(&key) {
+            return Err(format!(
+                "Error: protection domains '{}' and '{}' are both on {} and use the same pagetable '{}': {} (previously defined at {})",
+                prev_pd_name,
+                pd.name,
+                pd.cpu,
+                pagetable_name,
+                loc_string(xml_sdf, pd_pos),
+                loc_string(xml_sdf, *prev_pos),
+            ));
+        } else {
+            cpu_pagetable_to_pd.insert(key, (pd_pos, pd.name.as_str()));
+        }
+    }
+
+    Ok(())
+}
+
 fn value_error(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node, err: String) -> String {
     let pos = xml_sdf.doc.text_pos_at(node.range().start);
     format!(
@@ -1950,9 +2011,9 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         }
     }
 
-    // let mut pds = pd_flatten(&xml_sdf, root_pds)?;
     let pds = pd_flatten(&xml_sdf, root_pds)?;
-    
+    check_pd_pagetable_safety(&xml_sdf, &pds)?;
+
     for node in channel_nodes {
         let ch = Channel::from_xml(&xml_sdf, &node, &pds)?;
 
