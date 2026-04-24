@@ -83,6 +83,13 @@ fn loc_string(xml_sdf: &XmlSystemDescription, pos: roxmltree::TextPos) -> String
     format!("{}:{}:{}", xml_sdf.filename, pos.row, pos.col)
 }
 
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct SysPageTable {
+    pub name: String,
+    pub paddr: Option<u64>,
+    pub text_pos: roxmltree::TextPos,
+}
+
 #[repr(u8)]
 pub enum SysMapPerms {
     Read = 1,
@@ -293,6 +300,7 @@ pub struct ProtectionDomain {
     text_pos: Option<roxmltree::TextPos>,
     /// Index into the domain schedule vector if the system is using domain scheduling
     pub domain_id: Option<u64>,
+    pub pagetable: Option<String>,
 }
 
 impl Ord for ProtectionDomain {
@@ -372,6 +380,22 @@ impl ExecutionContext for VirtualMachine {
 
     fn kind(&self) -> &'static str {
         "virtual machine"
+    }
+}
+
+impl SysPageTable {
+    fn from_xml(xml_sdf: &XmlSystemDescription, node: &roxmltree::Node) -> Result<SysPageTable, String> {
+        check_attributes(xml_sdf, node, &["name", "paddr"])?;
+        let name = checked_lookup(xml_sdf, node, "name")?.to_string();
+        let paddr = checked_lookup(xml_sdf, node, "paddr")
+            .ok()
+            .map(|s| sdf_parse_number(s, node))
+            .transpose()?;
+        Ok(SysPageTable {
+            name,
+            paddr,
+            text_pos: xml_sdf.doc.text_pos_at(node.range().start),
+        })
     }
 }
 
@@ -514,6 +538,7 @@ impl ProtectionDomain {
             "smc",
             "cpu",
             "domain",
+            "pagetable",
         ];
         if is_child {
             attrs.push("id");
@@ -639,6 +664,8 @@ impl ProtectionDomain {
                 ),
             ));
         }
+        
+        let pagetable = node.attribute("pagetable").map(|s| s.to_string());
 
         #[allow(clippy::manual_range_contains)]
         if stack_size < PD_MIN_STACK_SIZE || stack_size > PD_MAX_STACK_SIZE {
@@ -1176,6 +1203,7 @@ impl ProtectionDomain {
             setvar_id,
             text_pos: Some(xml_sdf.doc.text_pos_at(node.range().start)),
             domain_id: domain_id.copied(),
+            pagetable,
         })
     }
 }
@@ -1564,6 +1592,7 @@ pub struct SystemDescription {
     pub protection_domains: BTreeMap<String, ProtectionDomain>,
     pub memory_regions: Vec<SysMemoryRegion>,
     pub channels: Vec<Channel>,
+    pub pagetables: Vec<SysPageTable>,
 }
 
 fn check_maps(
@@ -1787,6 +1816,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
     let mut root_pds = vec![];
     let mut mrs = vec![];
     let mut channels = vec![];
+    let mut pagetables = vec![];
 
     let system = doc
         .root()
@@ -1841,6 +1871,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
                     return Err(format!("Domain schedule is only supported if SDK is built with --experimental-domain-support: {}", loc_string(&xml_sdf, pos)));
                 }
             }
+            "pagetable" => pagetables.push(SysPageTable::from_xml(&xml_sdf, &child)?),
             _ => {
                 let pos = xml_sdf.doc.text_pos_at(child.range().start);
                 return Err(format!(
@@ -2235,6 +2266,7 @@ pub fn parse(filename: &str, xml: &str, config: &Config) -> Result<SystemDescrip
         protection_domains: pds,
         memory_regions: mrs,
         channels,
+        pagetables,
     })
 }
 
