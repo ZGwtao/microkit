@@ -407,4 +407,30 @@ impl DisjointMemoryRegion {
         Ok(new)
     }
 
+    pub fn allocate_aligned_from_top(&mut self, size: u64, align: u64) -> MemoryRegion {
+        let mut region_to_remove: Option<MemoryRegion> = None;
+
+        for region in self.regions.iter().rev() {
+            if size > region.size() {
+                continue;
+            }
+
+            let candidate_end = region.end;
+            let candidate_base = util::round_down(candidate_end.checked_sub(size).expect("underflow"), align);
+
+            if candidate_base >= region.base && candidate_base + size <= region.end {
+                region_to_remove = Some(MemoryRegion::new(candidate_base, candidate_base + size));
+                break;
+            }
+        }
+
+        match region_to_remove {
+            Some(region) => {
+                self.remove_region(region.base, region.end);
+                region
+            }
+            None => panic!("Unable to allocate {size} bytes from top with alignment {align}"),
+        }
+    }
+
 }

@@ -8,7 +8,7 @@ use std::{cmp::max, fmt::Display};
 use serde::Deserialize;
 
 use crate::{elf::ElfFile, util, DisjointMemoryRegion, MemoryRegion, UntypedObject};
-
+use crate::shadowpt::ShadowPageTable;
 use crate::sdf::{ChannelEnd, SysMemoryRegion, CpuCore, SystemDescription, SysMemoryRegionPaddr};
 
 use std::collections::BTreeMap;
@@ -39,6 +39,7 @@ pub struct FullSystemState {
     pub sys_memory_regions: Vec<SysMemoryRegion>,
     pub per_core_ram_regions: BTreeMap<CpuCore, DisjointMemoryRegion>,
     pub shared_memory_phys_regions: DisjointMemoryRegion,
+    pub shared_pagetable_phys_regions: DisjointMemoryRegion,
 }
 
 #[repr(C, packed)]
@@ -590,8 +591,69 @@ pub fn pick_sgi_channels(
     sgi_irq_numbers
 }
 
+fn allocate_shared_shadow_pagetables(
+    shadow_pagetables: &mut [ShadowPageTable],
+    available_normal_memory: &mut DisjointMemoryRegion,
+    kernel_config: &Config,
+) -> (
+    DisjointMemoryRegion,
+    BTreeMap<CpuCore, DisjointMemoryRegion>,
+) {
+    let mut all_shared_pagetable_phys_regions = DisjointMemoryRegion::default();
+    let mut per_core_shared_pagetable_regions: BTreeMap<CpuCore, DisjointMemoryRegion> =
+        BTreeMap::new();
+
+    let pt_obj_size = ObjectType::SmallPage
+        .fixed_size(kernel_config)
+        .expect("small page size should exist");
+
+    for shadow in shadow_pagetables.iter_mut() {
+        println!(
+            "allocating shared pagetable '{}' ({} objects, {} bytes)",
+            shadow.name,
+            shadow.objects.len(),
+            shadow.total_page_table_bytes
+        );
+
+        let object_ids: Vec<_> = shadow.objects.keys().copied().collect();
+
+        for obj_id in object_ids {
+            let phys_region =
+                available_normal_memory.allocate_aligned_from_top(pt_obj_size, pt_obj_size);
+
+            shadow
+                .assign_object_paddr(obj_id, phys_region.base, phys_region.size())
+                .expect("shadow pagetable object should be assignable exactly once");
+
+            all_shared_pagetable_phys_regions.insert_region(phys_region.base, phys_region.end);
+
+            for &cpu in &shadow.cpus {
+                per_core_shared_pagetable_regions
+                    .entry(cpu)
+                    .or_default()
+                    .insert_region(phys_region.base, phys_region.end);
+            }
+
+            println!(
+                "    shadow '{}' object {:?} -> [{:x}..{:x}), visible on cpus {:?}",
+                shadow.name,
+                obj_id,
+                phys_region.base,
+                phys_region.end,
+                shadow.cpus,
+            );
+        }
+    }
+
+    (
+        all_shared_pagetable_phys_regions,
+        per_core_shared_pagetable_regions,
+    )
+}
+
 pub fn build_full_system_state(
     system: &SystemDescription,
+    shadow_pagetables: &mut [ShadowPageTable],
     kernel_config: &Config,
     kernel_virt_image: MemoryRegion
 ) -> FullSystemState {
@@ -695,7 +757,7 @@ pub fn build_full_system_state(
         shared_phys_addr_prev = phys_addr;
     }
 
-    let per_core_ram_regions = {
+    let (per_core_ram_regions, shared_pagetable_phys_regions) = {
         let mut per_core_regions = BTreeMap::new();
 
         let mut available_normal_memory = DisjointMemoryRegion::default();
@@ -707,18 +769,35 @@ pub fn build_full_system_state(
             panic!("We shouldn't be calling build full system state for x86 builds yet!");
         }
 
-        // Remove shared memory.
+        // 1. Remove reserved/shared MR memory from normal RAM.
         for s_mr in shared_memory_phys_regions.regions.iter() {
             available_normal_memory.remove_region(s_mr.base, s_mr.end);
         }
 
-        println!("available memory:");
+        println!("available memory after removing shared memory regions:");
         for r in available_normal_memory.regions.iter() {
             println!("    [{:x}..{:x})", r.base, r.end);
         }
 
-        // TODO: I'm not convinced of this algorithm's correctness of always working.
-        //       It might not be the most efficient, but I don't know if it will always work.
+        // 2. Allocate shared pagetable memory from normal RAM.
+        let (
+            shared_pagetable_phys_regions,
+            per_core_shared_pagetable_regions,
+        ) = allocate_shared_shadow_pagetables(
+            shadow_pagetables,
+            &mut available_normal_memory,
+            kernel_config,
+        );
+
+        println!("shared pagetable memory:");
+        for r in shared_pagetable_phys_regions.regions.iter() {
+            println!("    [{:x}..{:x})", r.base, r.end);
+        }
+
+        println!("available memory after allocating shared pagetables:");
+        for r in available_normal_memory.regions.iter() {
+            println!("    [{:x}..{:x})", r.base, r.end);
+        }
 
         let kernel_size = kernel_virt_image.size();
 
@@ -769,7 +848,27 @@ pub fn build_full_system_state(
             core_normal_memory.extend(&ram_mem);
         }
 
-        per_core_regions
+        for (&cpu, shared_pt_regions) in per_core_shared_pagetable_regions.iter() {
+            let core_normal_memory = per_core_regions
+                .get_mut(&cpu)
+                .expect("cpu should exist in per_core_regions");
+
+            core_normal_memory.extend(shared_pt_regions);
+
+            println!("cpu({}) shared pagetable ram:", cpu.0);
+            for r in shared_pt_regions.regions.iter() {
+                println!("    [{:x}..{:x})", r.base, r.end);
+            }
+        }
+
+        for (&cpu, core_normal_memory) in per_core_regions.iter() {
+            println!("cpu({}) final ram regions:", cpu.0);
+            for r in core_normal_memory.regions.iter() {
+                println!("    [{:x}..{:x})", r.base, r.end);
+            }
+        }
+
+        (per_core_regions, shared_pagetable_phys_regions)
     };
 
     FullSystemState {
@@ -777,6 +876,7 @@ pub fn build_full_system_state(
         sys_memory_regions,
         per_core_ram_regions,
         shared_memory_phys_regions,
+        shared_pagetable_phys_regions,
     }
 }
 

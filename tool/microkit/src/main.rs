@@ -726,8 +726,12 @@ fn main() -> Result<(), String> {
             Arch::X86_64 => (None, None),
             Arch::Aarch64 | Arch::Riscv64 => {
                 let kernel_elf = ElfFile::from_path(&kernel_elf_path).unwrap();
-                let full_system_state = build_full_system_state(&system, &kernel_config, kernel_calculate_virt_image(&kernel_elf));
-
+                let full_system_state = build_full_system_state(
+                    &system,
+                    &mut shadow_pagetables,
+                    &kernel_config,
+                    kernel_calculate_virt_image(&kernel_elf)
+                );
                 (
                     Some(kernel_elf),
                     Some(full_system_state),
