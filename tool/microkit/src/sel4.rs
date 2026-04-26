@@ -153,6 +153,18 @@ fn kernel_calculate_phys_image(
     (kernel_phys_image, boot_region, kernel_p_v_offset)
 }
 
+fn dump_disjoint_memory_region(label: &str, dmr: &DisjointMemoryRegion) {
+    println!("{label}:");
+    if dmr.regions.is_empty() {
+        println!("    <empty>");
+        return;
+    }
+
+    for r in &dmr.regions {
+        println!("    [0x{:x}..0x{:x}) size=0x{:x}", r.base, r.end, r.size());
+    }
+}
+
 ///
 /// Emulate what happens during a kernel boot, up to the point
 /// where the reserved region is allocated to determine the memory ranges
@@ -164,6 +176,15 @@ fn kernel_partial_boot(
     full_system_state: &FullSystemState,
     cpu: CpuCore,
 ) -> KernelPartialBootInfo {
+
+    println!("========== all per_core_ram_regions ==========");
+    for (cpu, regions) in &full_system_state.per_core_ram_regions {
+        println!("cpu {}:", cpu.0);
+        for r in &regions.regions {
+            println!("    [0x{:x}..0x{:x}) size=0x{:x}", r.base, r.end, r.size());
+        }
+    }
+    println!("=============================================");
 
     // Reserved regions will cover device memory, and the memory of other
     // cores that we do not wish to modify.
@@ -195,6 +216,11 @@ fn kernel_partial_boot(
 
     let (kernel_region, boot_region, kernel_p_v_offset) =
         kernel_calculate_phys_image(kernel_elf, ram_regions);
+
+    println!("========== kernel region for cpu {} ==========", cpu.0);
+    println!("    [0x{:x}..0x{:x}) size=0x{:x}", kernel_region.base, kernel_region.end, kernel_region.size());
+    println!("    [0x{:x}..0x{:x}) size=0x{:x}", boot_region.base, boot_region.end, boot_region.size());
+    println!("==============================================");
 
     reserved_regions.insert_region(kernel_region.base, kernel_region.end);
 
@@ -314,6 +340,14 @@ fn kernel_partial_boot(
     // println!("Attempting to remove region: {:?}", normal_memory);
     // normal_memory.remove_region(self_mem.base, self_mem.end);
     // println!("{:x?}\n{:x?}", normal_memory.regions, device_memory.regions);
+
+    println!("========== kernel_partial_boot for cpu {} ==========", cpu.0);
+    // dump_disjoint_memory_region("per_core ram_regions", ram_regions);
+    dump_disjoint_memory_region("reserved_regions", &reserved_regions);
+    dump_disjoint_memory_region("free_memory", &free_memory);
+    dump_disjoint_memory_region("device_memory", &device_memory);
+    dump_disjoint_memory_region("normal_memory", &normal_memory);
+    println!("==============================================");
 
     KernelPartialBootInfo {
         device_memory,
