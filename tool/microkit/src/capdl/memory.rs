@@ -7,8 +7,55 @@ use crate::{
     capdl::{util::capdl_util_make_cte, CapDLNamedObject, CapDLSpecContainer},
     sel4::{Arch, Config, PageSize},
 };
-use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId};
+use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId, Word};
 use std::ops::Range;
+use std::collections::{BTreeMap, HashMap};
+use crate::shadowpt::{ShadowObjectId, ShadowPageTable, ShadowObjectKind};
+
+pub struct ShadowSpecContext<'a> {
+    pub shadow: &'a ShadowPageTable,
+    pub shadow_to_capdl: BTreeMap<ShadowObjectId, ObjectId>,
+    pub capdl_to_shadow: HashMap<ObjectId, ShadowObjectId>,
+}
+
+fn shadow_obj_paddr(
+    shadow: &ShadowPageTable,
+    shadow_obj_id: ShadowObjectId,
+) -> Result<Option<Word>, String> {
+    let obj = shadow.objects.get(&shadow_obj_id).ok_or_else(|| {
+        format!("shadow object {:?} not found in shadow pagetable '{}'", shadow_obj_id, shadow.name)
+    })?;
+
+    Ok(obj.phys.map(|p| Word::from(p.paddr)))
+}
+
+fn shadow_child_pt_for_slot(
+    shadow: &ShadowPageTable,
+    parent_shadow_obj_id: ShadowObjectId,
+    slot: usize,
+) -> Result<ShadowObjectId, String> {
+    let parent = shadow.objects.get(&parent_shadow_obj_id).ok_or_else(|| {
+        format!(
+            "parent shadow object {:?} not found in shadow pagetable '{}'",
+            parent_shadow_obj_id, shadow.name
+        )
+    })?;
+
+    let child_id = parent.children.get(&slot).copied().ok_or_else(|| {
+        format!(
+            "shadow pagetable '{}' missing child at parent {:?} slot {}",
+            shadow.name, parent_shadow_obj_id, slot
+        )
+    })?;
+
+    let child = shadow.objects.get(&child_id).ok_or_else(|| {
+        format!("child shadow object {:?} not found in shadow pagetable '{}'", child_id, shadow.name)
+    })?;
+
+    match child.kind {
+        ShadowObjectKind::PageTable { .. } => Ok(child_id),
+    }
+}
 
 /// For naming and debugging purposes only, no functional purpose.
 fn get_pt_level_name(sel4_config: &Config, level: usize) -> &str {
@@ -152,6 +199,7 @@ fn map_intermediary_level_helper(
     cur_level: usize,
     cur_level_slot: usize,
     vaddr: u64,
+    shadow_ctx: Option<&mut ShadowSpecContext<'_>>,
 ) -> Result<ObjectId, String> {
     let page_table_level_obj_wrapper = spec_container.get_root_object(cur_level_obj_id).unwrap();
     if let Object::PageTable(page_table_object) = &page_table_level_obj_wrapper.object {
@@ -183,10 +231,54 @@ fn map_intermediary_level_helper(
         ),
     };
     let next_level_coverage = get_pt_level_coverage(sel4_config, cur_level + 1, vaddr);
+
+    let (_, next_level_obj_id) = if let Some(ctx) = shadow_ctx {
+        let cur_shadow_obj_id = *ctx.capdl_to_shadow.get(&cur_level_obj_id).ok_or_else(|| {
+            format!(
+                "map_intermediary_level_helper(): capDL object {} for pd '{}' has no corresponding shadow object",
+                usize::from(cur_level_obj_id),
+                pd_name
+            )
+        })?;
+
+        let next_shadow_obj_id =
+            shadow_child_pt_for_slot(ctx.shadow, cur_shadow_obj_id, cur_level_slot)?;
+
+        if let Some(existing_obj_id) = ctx.shadow_to_capdl.get(&next_shadow_obj_id).copied() {
+            return Ok(existing_obj_id);
+        }
+
+        let next_level_paddr = shadow_obj_paddr(ctx.shadow, next_shadow_obj_id)?;
+
+        let next_level_inner_obj = object::PageTable {
+            x86_ept: vspace_obj.x86_ept,
+            is_root: false,
+            level: Some(cur_level as u8 + 1),
+            paddr: next_level_paddr,
+            slots: [].to_vec(),
+        };
+
+        let next_level_object = CapDLNamedObject {
+            name: format!(
+                "{}_{}_vaddr_0x{:x}",
+                next_level_name_prefix, pd_name, next_level_coverage.start
+            )
+            .into(),
+            object: Object::PageTable(next_level_inner_obj),
+        };
+
+        let next_level_obj_id = spec_container.add_root_object(next_level_object);
+        ctx.shadow_to_capdl.insert(next_shadow_obj_id, next_level_obj_id);
+        ctx.capdl_to_shadow.insert(next_level_obj_id, next_shadow_obj_id);
+
+        (next_level_paddr, next_level_obj_id)
+    } else {
+// old code without shadow pagetable context
     let next_level_inner_obj = object::PageTable {
         x86_ept: vspace_obj.x86_ept,
         is_root: false, // because the VSpace has already been created separately
         level: Some(cur_level as u8 + 1),
+        paddr: None,
         slots: [].to_vec(),
     };
     // We create name with this PT level coverage so that every object names are unique
@@ -199,6 +291,10 @@ fn map_intermediary_level_helper(
         object: Object::PageTable(next_level_inner_obj),
     };
     let next_level_obj_id = spec_container.add_root_object(next_level_object);
+// end of old code without shadow pagetable context
+        (None, next_level_obj_id)
+    };
+
     let next_level_cap = Cap::PageTable(cap::PageTable {
         object: next_level_obj_id,
     });
@@ -220,6 +316,7 @@ pub fn create_vspace(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
     pd_name: &str,
+    paddr: Option<Word>,
 ) -> ObjectId {
     spec_container.add_root_object(CapDLNamedObject {
         name: format!(
@@ -232,6 +329,7 @@ pub fn create_vspace(
             x86_ept: false,
             is_root: true,
             level: Some(top_pt_level_number(sel4_config) as u8),
+            paddr,
             slots: [].to_vec(),
         }),
     })
@@ -250,6 +348,7 @@ pub fn create_vspace_ept(
             x86_ept: true,
             is_root: true,
             level: Some(top_pt_level_number(sel4_config) as u8),
+            paddr: None,
             slots: [].to_vec(),
         }),
     })
@@ -266,6 +365,7 @@ fn map_recursive(
     frame_cap: Cap,
     frame_size_bytes: u64,
     vaddr: u64,
+    shadow_ctx: Option<&mut ShadowSpecContext<'_>>,
 ) -> Result<(), String> {
     if cur_level >= sel4_config.num_page_table_levels() {
         unreachable!("internal bug: we should have never recursed further!");
@@ -285,29 +385,62 @@ fn map_recursive(
     } else {
         // Recursive case: we have not gotten to the correct level, create the next level and recurse down.
         let next_level_name_prefix = get_pt_level_name(sel4_config, cur_level + 1);
-        match map_intermediary_level_helper(
-            spec_container,
-            sel4_config,
-            pd_name,
-            next_level_name_prefix,
-            vspace_obj_id,
-            pt_obj_id,
-            cur_level,
-            this_level_index,
-            vaddr,
-        ) {
-            Ok(next_level_pt_obj_id) => map_recursive(
-                spec_container,
-                sel4_config,
-                pd_name,
-                vspace_obj_id,
-                next_level_pt_obj_id,
-                cur_level + 1,
-                frame_cap,
-                frame_size_bytes,
-                vaddr,
-            ),
-            Err(err_reason) => Err(err_reason),
+
+        match shadow_ctx {
+            Some(ctx) => {
+                let next_level_pt_obj_id = map_intermediary_level_helper(
+                    spec_container,
+                    sel4_config,
+                    pd_name,
+                    next_level_name_prefix,
+                    vspace_obj_id,
+                    pt_obj_id,
+                    cur_level,
+                    this_level_index,
+                    vaddr,
+                    Some(&mut *ctx),
+                )?;
+
+                map_recursive(
+                    spec_container,
+                    sel4_config,
+                    pd_name,
+                    vspace_obj_id,
+                    next_level_pt_obj_id,
+                    cur_level + 1,
+                    frame_cap,
+                    frame_size_bytes,
+                    vaddr,
+                    Some(&mut *ctx),
+                )
+            }
+            None => {
+                let next_level_pt_obj_id = map_intermediary_level_helper(
+                    spec_container,
+                    sel4_config,
+                    pd_name,
+                    next_level_name_prefix,
+                    vspace_obj_id,
+                    pt_obj_id,
+                    cur_level,
+                    this_level_index,
+                    vaddr,
+                    None,
+                )?;
+
+                map_recursive(
+                    spec_container,
+                    sel4_config,
+                    pd_name,
+                    vspace_obj_id,
+                    next_level_pt_obj_id,
+                    cur_level + 1,
+                    frame_cap,
+                    frame_size_bytes,
+                    vaddr,
+                    None,
+                )
+            }
         }
     }
 }
@@ -320,6 +453,7 @@ pub fn map_page(
     frame_cap: Cap,
     frame_size_bytes: u64,
     vaddr: u64,
+    shadow_ctx: Option<&mut ShadowSpecContext<'_>>,
 ) -> Result<(), String> {
     map_recursive(
         spec_container,
@@ -331,5 +465,6 @@ pub fn map_page(
         frame_cap,
         frame_size_bytes,
         vaddr,
+        shadow_ctx,
     )
 }

@@ -8,7 +8,7 @@ use std::{cmp::max, fmt::Display};
 use serde::Deserialize;
 
 use crate::{elf::ElfFile, util, DisjointMemoryRegion, MemoryRegion, UntypedObject};
-use crate::shadowpt::ShadowPageTable;
+use crate::shadowpt::{ShadowPageTable, ShadowObjectId, ShadowObjectKind};
 use crate::sdf::{ChannelEnd, SysMemoryRegion, CpuCore, SystemDescription, SysMemoryRegionPaddr};
 
 use std::collections::BTreeMap;
@@ -40,6 +40,7 @@ pub struct FullSystemState {
     pub per_core_ram_regions: BTreeMap<CpuCore, DisjointMemoryRegion>,
     pub shared_memory_phys_regions: DisjointMemoryRegion,
     pub shared_pagetable_phys_regions: DisjointMemoryRegion,
+    pub shadow_pagetables: Vec<ShadowPageTable>,
 }
 
 #[repr(C, packed)]
@@ -152,6 +153,18 @@ fn kernel_calculate_phys_image(
     (kernel_phys_image, boot_region, kernel_p_v_offset)
 }
 
+fn dump_disjoint_memory_region(label: &str, dmr: &DisjointMemoryRegion) {
+    println!("{label}:");
+    if dmr.regions.is_empty() {
+        println!("    <empty>");
+        return;
+    }
+
+    for r in &dmr.regions {
+        println!("    [0x{:x}..0x{:x}) size=0x{:x}", r.base, r.end, r.size());
+    }
+}
+
 ///
 /// Emulate what happens during a kernel boot, up to the point
 /// where the reserved region is allocated to determine the memory ranges
@@ -163,6 +176,15 @@ fn kernel_partial_boot(
     full_system_state: &FullSystemState,
     cpu: CpuCore,
 ) -> KernelPartialBootInfo {
+
+    println!("========== all per_core_ram_regions ==========");
+    for (cpu, regions) in &full_system_state.per_core_ram_regions {
+        println!("cpu {}:", cpu.0);
+        for r in &regions.regions {
+            println!("    [0x{:x}..0x{:x}) size=0x{:x}", r.base, r.end, r.size());
+        }
+    }
+    println!("=============================================");
 
     // Reserved regions will cover device memory, and the memory of other
     // cores that we do not wish to modify.
@@ -194,6 +216,11 @@ fn kernel_partial_boot(
 
     let (kernel_region, boot_region, kernel_p_v_offset) =
         kernel_calculate_phys_image(kernel_elf, ram_regions);
+
+    println!("========== kernel region for cpu {} ==========", cpu.0);
+    println!("    [0x{:x}..0x{:x}) size=0x{:x}", kernel_region.base, kernel_region.end, kernel_region.size());
+    println!("    [0x{:x}..0x{:x}) size=0x{:x}", boot_region.base, boot_region.end, boot_region.size());
+    println!("==============================================");
 
     reserved_regions.insert_region(kernel_region.base, kernel_region.end);
 
@@ -313,6 +340,14 @@ fn kernel_partial_boot(
     // println!("Attempting to remove region: {:?}", normal_memory);
     // normal_memory.remove_region(self_mem.base, self_mem.end);
     // println!("{:x?}\n{:x?}", normal_memory.regions, device_memory.regions);
+
+    println!("========== kernel_partial_boot for cpu {} ==========", cpu.0);
+    // dump_disjoint_memory_region("per_core ram_regions", ram_regions);
+    dump_disjoint_memory_region("reserved_regions", &reserved_regions);
+    dump_disjoint_memory_region("free_memory", &free_memory);
+    dump_disjoint_memory_region("device_memory", &device_memory);
+    dump_disjoint_memory_region("normal_memory", &normal_memory);
+    println!("==============================================");
 
     KernelPartialBootInfo {
         device_memory,
@@ -591,21 +626,37 @@ pub fn pick_sgi_channels(
     sgi_irq_numbers
 }
 
+fn shadow_obj_size_bytes(
+    shadow: &ShadowPageTable,
+    obj_id: ShadowObjectId,
+    kernel_config: &Config,
+) -> u64 {
+    let obj = shadow
+        .objects
+        .get(&obj_id)
+        .expect("shadow object should exist");
+
+    match &obj.kind {
+        ShadowObjectKind::PageTable { is_root, .. } => {
+            if *is_root {
+                ObjectType::VSpace
+                    .fixed_size(kernel_config)
+                    .expect("VSpace should have a fixed size")
+            } else {
+                ObjectType::PageTable
+                    .fixed_size(kernel_config)
+                    .expect("PageTable should have a fixed size")
+            }
+        }
+    }
+}
+
 fn allocate_shared_shadow_pagetables(
     shadow_pagetables: &mut [ShadowPageTable],
-    available_normal_memory: &mut DisjointMemoryRegion,
+    shared_phys_addr_prev: &mut u64,
     kernel_config: &Config,
-) -> (
-    DisjointMemoryRegion,
-    BTreeMap<CpuCore, DisjointMemoryRegion>,
-) {
+) -> DisjointMemoryRegion {
     let mut all_shared_pagetable_phys_regions = DisjointMemoryRegion::default();
-    let mut per_core_shared_pagetable_regions: BTreeMap<CpuCore, DisjointMemoryRegion> =
-        BTreeMap::new();
-
-    let pt_obj_size = ObjectType::SmallPage
-        .fixed_size(kernel_config)
-        .expect("small page size should exist");
 
     for shadow in shadow_pagetables.iter_mut() {
         println!(
@@ -618,37 +669,33 @@ fn allocate_shared_shadow_pagetables(
         let object_ids: Vec<_> = shadow.objects.keys().copied().collect();
 
         for obj_id in object_ids {
-            let phys_region =
-                available_normal_memory.allocate_aligned_from_top(pt_obj_size, pt_obj_size);
+            let obj_size = shadow_obj_size_bytes(shadow, obj_id, kernel_config);
+
+            let phys_addr = (*shared_phys_addr_prev)
+                .checked_sub(obj_size)
+                .expect("no underflow while allocating shared pagetable object");
 
             shadow
-                .assign_object_paddr(obj_id, phys_region.base, phys_region.size())
+                .assign_object_paddr(obj_id, phys_addr, obj_size)
                 .expect("shadow pagetable object should be assignable exactly once");
 
-            all_shared_pagetable_phys_regions.insert_region(phys_region.base, phys_region.end);
+            all_shared_pagetable_phys_regions
+                .insert_region(phys_addr, phys_addr + obj_size);
 
-            for &cpu in &shadow.cpus {
-                per_core_shared_pagetable_regions
-                    .entry(cpu)
-                    .or_default()
-                    .insert_region(phys_region.base, phys_region.end);
-            }
+            *shared_phys_addr_prev = phys_addr;
 
             println!(
-                "    shadow '{}' object {:?} -> [{:x}..{:x}), visible on cpus {:?}",
+                "    shadow '{}' object {:?} -> [{:x}..{:x}) size=0x{:x}",
                 shadow.name,
                 obj_id,
-                phys_region.base,
-                phys_region.end,
-                shadow.cpus,
+                phys_addr,
+                phys_addr + obj_size,
+                obj_size,
             );
         }
     }
 
-    (
-        all_shared_pagetable_phys_regions,
-        per_core_shared_pagetable_regions,
-    )
+    all_shared_pagetable_phys_regions
 }
 
 pub fn build_full_system_state(
@@ -757,6 +804,12 @@ pub fn build_full_system_state(
         shared_phys_addr_prev = phys_addr;
     }
 
+    let shared_pagetable_phys_regions = allocate_shared_shadow_pagetables(
+        shadow_pagetables,
+        &mut shared_phys_addr_prev,
+        kernel_config,
+    );
+
     let (per_core_ram_regions, shared_pagetable_phys_regions) = {
         let mut per_core_regions = BTreeMap::new();
 
@@ -773,21 +826,14 @@ pub fn build_full_system_state(
         for s_mr in shared_memory_phys_regions.regions.iter() {
             available_normal_memory.remove_region(s_mr.base, s_mr.end);
         }
+        for s_pt in shared_pagetable_phys_regions.regions.iter() {
+            available_normal_memory.remove_region(s_pt.base, s_pt.end);
+        }
 
         println!("available memory after removing shared memory regions:");
         for r in available_normal_memory.regions.iter() {
             println!("    [{:x}..{:x})", r.base, r.end);
         }
-
-        // 2. Allocate shared pagetable memory from normal RAM.
-        let (
-            shared_pagetable_phys_regions,
-            per_core_shared_pagetable_regions,
-        ) = allocate_shared_shadow_pagetables(
-            shadow_pagetables,
-            &mut available_normal_memory,
-            kernel_config,
-        );
 
         println!("shared pagetable memory:");
         for r in shared_pagetable_phys_regions.regions.iter() {
@@ -848,18 +894,18 @@ pub fn build_full_system_state(
             core_normal_memory.extend(&ram_mem);
         }
 
-        for (&cpu, shared_pt_regions) in per_core_shared_pagetable_regions.iter() {
-            let core_normal_memory = per_core_regions
-                .get_mut(&cpu)
-                .expect("cpu should exist in per_core_regions");
+        // for (&cpu, shared_pt_regions) in per_core_shared_pagetable_regions.iter() {
+        //     let core_normal_memory = per_core_regions
+        //         .get_mut(&cpu)
+        //         .expect("cpu should exist in per_core_regions");
 
-            core_normal_memory.extend(shared_pt_regions);
+        //     core_normal_memory.extend(shared_pt_regions);
 
-            println!("cpu({}) shared pagetable ram:", cpu.0);
-            for r in shared_pt_regions.regions.iter() {
-                println!("    [{:x}..{:x})", r.base, r.end);
-            }
-        }
+        //     println!("cpu({}) shared pagetable ram:", cpu.0);
+        //     for r in shared_pt_regions.regions.iter() {
+        //         println!("    [{:x}..{:x})", r.base, r.end);
+        //     }
+        // }
 
         for (&cpu, core_normal_memory) in per_core_regions.iter() {
             println!("cpu({}) final ram regions:", cpu.0);
@@ -877,6 +923,7 @@ pub fn build_full_system_state(
         per_core_ram_regions,
         shared_memory_phys_regions,
         shared_pagetable_phys_regions,
+        shadow_pagetables: shadow_pagetables.to_vec(),
     }
 }
 
