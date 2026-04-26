@@ -34,6 +34,13 @@ use std::collections::BTreeMap;
 use std::fs::{self, metadata};
 use std::path::{Path, PathBuf};
 
+use microkit_tool::shadowpt::{
+    build_shared_shadow_pagetables,
+    populate_shared_shadow_pagetables_with_mrs,
+    populate_shared_shadow_pagetables_with_stack_and_ipc_buffers,
+    ShadowObjectKind
+};
+
 const MAX_BUILD_ITERATION: usize = 3;
 
 // When building for x86, the kernel is copied from the SDK release package to the same
@@ -609,7 +616,95 @@ fn main() -> Result<(), String> {
     // and once this is finished, subtract the result from reserved region
     // Also, for each pagetable structure, tag each pagetable object with an address
 
+    let mut search_paths = vec![std::env::current_dir().unwrap()];
+    for path in &args.search_paths {
+        search_paths.push(PathBuf::from(path));
+    }
 
+    let mut shadow_pagetables = match build_shared_shadow_pagetables(
+        &system,
+        &kernel_config,
+        &search_paths,
+    ) {
+        Ok(shadows) => shadows,
+        Err(err) => {
+            eprintln!("{err}");
+            std::process::exit(1);
+        }
+    };
+
+    if let Err(err) = populate_shared_shadow_pagetables_with_mrs(
+        &mut shadow_pagetables,
+        &system,
+        &kernel_config,
+    ) {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
+
+    if let Err(err) = populate_shared_shadow_pagetables_with_stack_and_ipc_buffers(
+        &mut shadow_pagetables,
+        &system,
+        &kernel_config,
+    ) {
+        eprintln!("{err}");
+        std::process::exit(1);
+    }
+
+    println!("Built {} shadow pagetable(s)", shadow_pagetables.len());
+
+    for shadow in &shadow_pagetables {
+        println!(
+            "shadow pagetable '{}': pds={:?}, cpus={:?}, image='{}', objects={}, total_pt_bytes={}",
+            shadow.name,
+            shadow.pd_names,
+            shadow.cpus,
+            shadow.program_image.display(),
+            shadow.objects.len(),
+            shadow.total_page_table_bytes,
+        );
+    }
+
+    println!("Built {} shadow pagetable(s)", shadow_pagetables.len());
+
+    for shadow in &shadow_pagetables {
+        println!("----------------------------------------");
+        println!("ShadowPageTable '{}'", shadow.name);
+        println!("  pd_names: {:?}", shadow.pd_names);
+        println!("  cpus: {:?}", shadow.cpus);
+        println!("  program_image: {}", shadow.program_image.display());
+        println!("  root: {:?}", shadow.root);
+        println!("  total_page_table_bytes: {}", shadow.total_page_table_bytes);
+        println!("  object_count: {}", shadow.objects.len());
+
+        for (obj_id, obj) in &shadow.objects {
+            match &obj.kind {
+                ShadowObjectKind::PageTable {
+                    level,
+                    is_root,
+                    coverage,
+                } => {
+                    println!(
+                        "    object {:?}: level={}, is_root={}, coverage=[0x{:x}..0x{:x}), parent={:?}, parent_slot={:?}, phys={:?}, children={}",
+                        obj_id,
+                        level,
+                        is_root,
+                        coverage.start,
+                        coverage.end,
+                        obj.parent,
+                        obj.parent_slot,
+                        obj.phys,
+                        obj.children.len(),
+                    );
+
+                    if !obj.children.is_empty() {
+                        println!("      child slots: {:?}", obj.children);
+                    }
+                }
+            }
+        }
+    }
+    println!("----------------------------------------");
 
 
     // ********************************************************************************************************************************************************
@@ -670,10 +765,10 @@ fn main() -> Result<(), String> {
 
         let monitor_elf = ElfFile::from_path(&monitor_elf_path)?;
 
-        let mut search_paths = vec![std::env::current_dir().unwrap()];
-        for path in &args.search_paths {
-            search_paths.push(PathBuf::from(path));
-        }
+        // let mut search_paths = vec![std::env::current_dir().unwrap()];
+        // for path in &args.search_paths {
+        //     search_paths.push(PathBuf::from(path));
+        // }
 
         let core_local_pds: BTreeMap<String, ProtectionDomain> = system
             .protection_domains

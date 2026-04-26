@@ -21,6 +21,7 @@ pub mod sel4;
 pub mod symbols;
 pub mod uimage;
 pub mod util;
+pub mod shadowpt;
 
 // Note that these values are used in the monitor so should also be changed there
 // if any of these were to change.
