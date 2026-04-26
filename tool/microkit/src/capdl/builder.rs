@@ -195,7 +195,7 @@ impl CapDLSpecContainer {
             .as_ref()
             .and_then(|ctx| ctx.shadow.objects.get(&ctx.shadow.root))
             .and_then(|obj| obj.phys)
-            .map(|phys| phys.paddr);
+            .map(|phys| Word::from(phys.paddr));
 
         // We assumes that ELFs and PDs have a one-to-one relationship. So for each ELF we create a VSpace.
         let vspace_obj_id = create_vspace(self, sel4_config, pd_name, root_paddr);

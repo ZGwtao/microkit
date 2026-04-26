@@ -7,7 +7,7 @@ use crate::{
     capdl::{util::capdl_util_make_cte, CapDLNamedObject, CapDLSpecContainer},
     sel4::{Arch, Config, PageSize},
 };
-use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId};
+use sel4_capdl_initializer_types::{cap, object, Cap, Object, ObjectId, Word};
 use std::ops::Range;
 use std::collections::{BTreeMap, HashMap};
 use crate::shadowpt::{ShadowObjectId, ShadowPageTable, ShadowObjectKind};
@@ -21,12 +21,12 @@ pub struct ShadowSpecContext<'a> {
 fn shadow_obj_paddr(
     shadow: &ShadowPageTable,
     shadow_obj_id: ShadowObjectId,
-) -> Result<Option<u64>, String> {
+) -> Result<Option<Word>, String> {
     let obj = shadow.objects.get(&shadow_obj_id).ok_or_else(|| {
         format!("shadow object {:?} not found in shadow pagetable '{}'", shadow_obj_id, shadow.name)
     })?;
 
-    Ok(obj.phys.map(|p| p.paddr))
+    Ok(obj.phys.map(|p| Word::from(p.paddr)))
 }
 
 fn shadow_child_pt_for_slot(
@@ -316,7 +316,7 @@ pub fn create_vspace(
     spec_container: &mut CapDLSpecContainer,
     sel4_config: &Config,
     pd_name: &str,
-    paddr: Option<u64>,
+    paddr: Option<Word>,
 ) -> ObjectId {
     spec_container.add_root_object(CapDLNamedObject {
         name: format!(
