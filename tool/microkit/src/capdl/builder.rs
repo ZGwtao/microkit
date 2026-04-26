@@ -20,7 +20,7 @@ use crate::{
     capdl::{
         irq::{create_irq_handler_cap, create_irq_handler_cap_no_ntfn,
             capdl_util_make_sgi_signal_obj, make_irq_sgi_signal_cap},
-        memory::{create_vspace, create_vspace_ept, map_page},
+        memory::{create_vspace, create_vspace_ept, map_page, ShadowSpecContext},
         spec::{capdl_obj_physical_size_bits, ElfContent},
         util::*,
     },
@@ -189,10 +189,23 @@ impl CapDLSpecContainer {
         pd_name: &str,
         _pd_cpu: CpuCore,
         elf: &ElfFile,
+        mut shadow_ctx: Option<&mut ShadowSpecContext<'_>>,
     ) -> Result<ObjectId, String> {
+        let root_paddr = shadow_ctx
+            .as_ref()
+            .and_then(|ctx| ctx.shadow.objects.get(&ctx.shadow.root))
+            .and_then(|obj| obj.phys)
+            .map(|phys| phys.paddr);
+
         // We assumes that ELFs and PDs have a one-to-one relationship. So for each ELF we create a VSpace.
-        let vspace_obj_id = create_vspace(self, sel4_config, pd_name);
+        let vspace_obj_id = create_vspace(self, sel4_config, pd_name, root_paddr);
         let vspace_cap = capdl_util_make_page_table_cap(vspace_obj_id);
+
+        // If this PD is using a shadow pagetable, record the root mapping once.
+        if let Some(ctx) = shadow_ctx.as_deref_mut() {
+            ctx.shadow_to_capdl.insert(ctx.shadow.root, vspace_obj_id);
+            ctx.capdl_to_shadow.insert(vspace_obj_id, ctx.shadow.root);
+        }
 
         // For each loadable segment in the ELF, map it into the address space of this PD.
         let mut frame_sequence = 0; // For object naming purpose only.
@@ -262,15 +275,30 @@ impl CapDLSpecContainer {
                     true,
                 );
 
-                match map_page(
-                    self,
-                    sel4_config,
-                    pd_name,
-                    vspace_obj_id,
-                    frame_cap,
-                    page_size_bytes,
-                    cur_vaddr,
-                ) {
+                let map_result = match shadow_ctx.as_deref_mut() {
+                    Some(ctx) => map_page(
+                        self,
+                        sel4_config,
+                        pd_name,
+                        vspace_obj_id,
+                        frame_cap,
+                        page_size_bytes,
+                        cur_vaddr,
+                        Some(ctx),
+                    ),
+                    None => map_page(
+                        self,
+                        sel4_config,
+                        pd_name,
+                        vspace_obj_id,
+                        frame_cap,
+                        page_size_bytes,
+                        cur_vaddr,
+                        None,
+                    ),
+                };
+
+                match map_result {
                     Ok(_) => {
                         frame_sequence += 1;
                         cur_vaddr += page_size_bytes;
@@ -296,22 +324,39 @@ impl CapDLSpecContainer {
         );
         let ipcbuf_frame_cap =
             capdl_util_make_frame_cap(ipcbuf_frame_obj_id, true, true, false, true);
-        // We need to clone the IPC buf cap because in addition to mapping the frame into the VSpace, we need to bind
-        // this frame to the TCB as well.
+
+        // We need to clone the IPC buf cap because in addition to mapping the frame into the VSpace,
+        // we need to bind this frame to the TCB as well.
         let ipcbuf_frame_cap_for_tcb = ipcbuf_frame_cap.clone();
         let ipcbuf_vaddr = elf
             .find_symbol(SYMBOL_IPC_BUFFER)
             .unwrap_or_else(|_| panic!("Could not find {SYMBOL_IPC_BUFFER}"))
             .0;
-        match map_page(
-            self,
-            sel4_config,
-            pd_name,
-            vspace_obj_id,
-            ipcbuf_frame_cap,
-            PageSize::Small as u64,
-            ipcbuf_vaddr,
-        ) {
+
+        let map_result = match shadow_ctx.as_deref_mut() {
+            Some(ctx) => map_page(
+                self,
+                sel4_config,
+                pd_name,
+                vspace_obj_id,
+                ipcbuf_frame_cap,
+                PageSize::Small as u64,
+                ipcbuf_vaddr,
+                Some(ctx),
+            ),
+            None => map_page(
+                self,
+                sel4_config,
+                pd_name,
+                vspace_obj_id,
+                ipcbuf_frame_cap,
+                PageSize::Small as u64,
+                ipcbuf_vaddr,
+                None,
+            ),
+        };
+
+        match map_result {
             Ok(_) => {}
             Err(map_err_reason) => {
                 return Err(format!(
@@ -365,6 +410,7 @@ fn map_memory_region(
     page_sz: u64,
     target_vspace: ObjectId,
     frames: &[ObjectId],
+    mut shadow_ctx: Option<&mut ShadowSpecContext<'_>>,
 ) {
     let mut cur_vaddr = map.vaddr;
     let read = map.perms & SysMapPerms::Read as u8 != 0;
@@ -375,16 +421,34 @@ fn map_memory_region(
         // Make a cap for this frame.
         let frame_cap = capdl_util_make_frame_cap(*frame_obj_id, read, write, execute, cached);
         // Map it into this PD address space.
-        map_page(
-            spec_container,
-            sel4_config,
-            pd_name,
-            target_vspace,
-            frame_cap,
-            page_sz,
-            cur_vaddr,
-        )
-        .unwrap();
+        match shadow_ctx.as_deref_mut() {
+            Some(ctx) => {
+                map_page(
+                    spec_container,
+                    sel4_config,
+                    pd_name,
+                    target_vspace,
+                    frame_cap,
+                    page_sz,
+                    cur_vaddr,
+                    Some(ctx),
+                )
+                .unwrap();
+            }
+            None => {
+                map_page(
+                    spec_container,
+                    sel4_config,
+                    pd_name,
+                    target_vspace,
+                    frame_cap,
+                    page_sz,
+                    cur_vaddr,
+                    None,
+                )
+                .unwrap();
+            }
+        }
         cur_vaddr += page_sz;
     }
 }
@@ -417,6 +481,7 @@ pub fn build_capdl_spec(
                 MONITOR_PD_NAME,
                 CpuCore(0),
                 monitor_elf,
+                None, // Monitor doesn't have a shadow pagetable
             )
             .unwrap()
     };
@@ -477,6 +542,7 @@ pub fn build_capdl_spec(
         mon_stack_frame_cap,
         PageSize::Small as u64,
         kernel_config.pd_stack_bottom(MON_STACK_SIZE),
+        None,
     )
     .unwrap();
 
@@ -573,10 +639,31 @@ pub fn build_capdl_spec(
         let mut caps_to_bind_to_tcb: Vec<CapTableEntry> = Vec::new();
         let mut caps_to_insert_to_pd_cspace: Vec<CapTableEntry> = Vec::new();
 
+        let shadow_for_pd = pd
+            .pagetable
+            .as_ref()
+            .and_then(|pt_name| {
+                full_system_state
+                    .shadow_pagetables
+                    .iter()
+                    .find(|shadow| shadow.name == *pt_name)
+            });
+
+        let mut shadow_ctx = shadow_for_pd.map(|shadow| ShadowSpecContext {
+            shadow,
+            shadow_to_capdl: BTreeMap::new(),
+            capdl_to_shadow: HashMap::new(),
+        });
+
         // Step 3-1: Create TCB and VSpace with all ELF loadable frames mapped in.
-        let pd_tcb_obj_id = spec_container
-            .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, elf_obj)
-            .unwrap();
+        let pd_tcb_obj_id = match shadow_ctx.as_mut() {
+            Some(ctx) => spec_container
+                .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, elf_obj, Some(ctx))
+                .unwrap(),
+            None => spec_container
+                .add_elf_to_spec(kernel_config, &pd.name, pd.cpu, elf_obj, None)
+                .unwrap(),
+        };
         let pd_vspace_obj_id = capdl_util_get_vspace_id_from_tcb_id(&spec_container, pd_tcb_obj_id);
 
         // In the benchmark configuration, we allow PDs to access their own TCB.
@@ -620,15 +707,28 @@ pub fn build_capdl_spec(
                 }
             }
 
-            map_memory_region(
-                &mut spec_container,
-                kernel_config,
-                &pd.name,
-                map,
-                page_size_bytes,
-                pd_vspace_obj_id,
-                frames,
-            );
+            match shadow_ctx.as_mut() {
+                Some(ctx) => map_memory_region(
+                    &mut spec_container,
+                    kernel_config,
+                    &pd.name,
+                    map,
+                    page_size_bytes,
+                    pd_vspace_obj_id,
+                    frames,
+                    Some(ctx),
+                ),
+                None => map_memory_region(
+                    &mut spec_container,
+                    kernel_config,
+                    &pd.name,
+                    map,
+                    page_size_bytes,
+                    pd_vspace_obj_id,
+                    frames,
+                    None,
+                ),
+            }
         }
 
         // Step 3-3: Create and map in the stack (bottom up)
@@ -647,16 +747,34 @@ pub fn build_capdl_spec(
             );
             let stack_frame_cap =
                 capdl_util_make_frame_cap(stack_frame_obj_id, true, true, false, true);
-            map_page(
-                &mut spec_container,
-                kernel_config,
-                &pd.name,
-                pd_vspace_obj_id,
-                stack_frame_cap,
-                PageSize::Small as u64,
-                cur_stack_vaddr,
-            )
-            .unwrap();
+            match shadow_ctx.as_mut() {
+                Some(ctx) => {
+                    map_page(
+                        &mut spec_container,
+                        kernel_config,
+                        &pd.name,
+                        pd_vspace_obj_id,
+                        stack_frame_cap,
+                        PageSize::Small as u64,
+                        cur_stack_vaddr,
+                        Some(ctx),
+                    )
+                    .unwrap();
+                }
+                None => {
+                    map_page(
+                        &mut spec_container,
+                        kernel_config,
+                        &pd.name,
+                        pd_vspace_obj_id,
+                        stack_frame_cap,
+                        PageSize::Small as u64,
+                        cur_stack_vaddr,
+                        None,
+                    )
+                    .unwrap();
+                }
+            }
             cur_stack_vaddr += PageSize::Small as u64;
         }
 
@@ -796,7 +914,7 @@ pub fn build_capdl_spec(
                 Arch::X86_64 => {
                     create_vspace_ept(&mut spec_container, kernel_config, &virtual_machine.name)
                 }
-                _ => create_vspace(&mut spec_container, kernel_config, &virtual_machine.name),
+                _ => create_vspace(&mut spec_container, kernel_config, &virtual_machine.name, None),
             };
             let vm_vspace_cap = capdl_util_make_page_table_cap(vm_vspace_obj_id);
             for map in virtual_machine.maps.iter() {
@@ -811,6 +929,7 @@ pub fn build_capdl_spec(
                     page_size_bytes,
                     vm_vspace_obj_id,
                     frames,
+                    None,
                 );
             }
 

@@ -40,6 +40,7 @@ pub struct FullSystemState {
     pub per_core_ram_regions: BTreeMap<CpuCore, DisjointMemoryRegion>,
     pub shared_memory_phys_regions: DisjointMemoryRegion,
     pub shared_pagetable_phys_regions: DisjointMemoryRegion,
+    pub shadow_pagetables: Vec<ShadowPageTable>,
 }
 
 #[repr(C, packed)]
@@ -877,6 +878,7 @@ pub fn build_full_system_state(
         per_core_ram_regions,
         shared_memory_phys_regions,
         shared_pagetable_phys_regions,
+        shadow_pagetables: shadow_pagetables.to_vec(),
     }
 }
 
