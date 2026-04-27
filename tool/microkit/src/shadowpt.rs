@@ -141,7 +141,9 @@ impl ShadowPageTable {
             program_image: PathBuf::new(),
             root: root_id,
             objects: BTreeMap::from([(root_id, root_obj)]),
-            total_page_table_bytes: PageSize::Small as u64,
+            total_page_table_bytes: crate::sel4::ObjectType::VSpace
+                .fixed_size(sel4_config)
+                .expect("VSpace should have a fixed size"),
             next_object_id: 1,
         }
     }
@@ -154,6 +156,7 @@ impl ShadowPageTable {
 
     fn allocate_and_insert_page_table_object(
         &mut self,
+        sel4_config: &Config,
         level: usize,
         is_root: bool,
         coverage: Range<u64>,
@@ -176,7 +179,9 @@ impl ShadowPageTable {
         };
 
         self.objects.insert(id, obj);
-        self.total_page_table_bytes += PageSize::Small as u64;
+        self.total_page_table_bytes += crate::sel4::ObjectType::PageTable
+            .fixed_size(sel4_config)
+            .expect("PageTable should have a fixed size");
         id
     }
 
@@ -231,6 +236,7 @@ fn shadow_map_intermediary_level(
     let next_level = cur_level + 1;
     let next_level_coverage = shadow_get_pt_level_coverage(sel4_config, next_level, vaddr);
     let next_level_obj_id = shadow.allocate_and_insert_page_table_object(
+        sel4_config,
         next_level,
         false,
         next_level_coverage,

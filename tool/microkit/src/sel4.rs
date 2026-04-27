@@ -8,7 +8,7 @@ use std::{cmp::max, fmt::Display};
 use serde::Deserialize;
 
 use crate::{elf::ElfFile, util, DisjointMemoryRegion, MemoryRegion, UntypedObject};
-use crate::shadowpt::ShadowPageTable;
+use crate::shadowpt::{ShadowPageTable, ShadowObjectId, ShadowObjectKind};
 use crate::sdf::{ChannelEnd, SysMemoryRegion, CpuCore, SystemDescription, SysMemoryRegionPaddr};
 
 use std::collections::BTreeMap;
@@ -626,21 +626,37 @@ pub fn pick_sgi_channels(
     sgi_irq_numbers
 }
 
+fn shadow_obj_size_bytes(
+    shadow: &ShadowPageTable,
+    obj_id: ShadowObjectId,
+    kernel_config: &Config,
+) -> u64 {
+    let obj = shadow
+        .objects
+        .get(&obj_id)
+        .expect("shadow object should exist");
+
+    match &obj.kind {
+        ShadowObjectKind::PageTable { is_root, .. } => {
+            if *is_root {
+                ObjectType::VSpace
+                    .fixed_size(kernel_config)
+                    .expect("VSpace should have a fixed size")
+            } else {
+                ObjectType::PageTable
+                    .fixed_size(kernel_config)
+                    .expect("PageTable should have a fixed size")
+            }
+        }
+    }
+}
+
 fn allocate_shared_shadow_pagetables(
     shadow_pagetables: &mut [ShadowPageTable],
-    available_normal_memory: &mut DisjointMemoryRegion,
+    shared_phys_addr_prev: &mut u64,
     kernel_config: &Config,
-) -> (
-    DisjointMemoryRegion,
-    BTreeMap<CpuCore, DisjointMemoryRegion>,
-) {
+) -> DisjointMemoryRegion {
     let mut all_shared_pagetable_phys_regions = DisjointMemoryRegion::default();
-    let mut per_core_shared_pagetable_regions: BTreeMap<CpuCore, DisjointMemoryRegion> =
-        BTreeMap::new();
-
-    let pt_obj_size = ObjectType::SmallPage
-        .fixed_size(kernel_config)
-        .expect("small page size should exist");
 
     for shadow in shadow_pagetables.iter_mut() {
         println!(
@@ -653,37 +669,33 @@ fn allocate_shared_shadow_pagetables(
         let object_ids: Vec<_> = shadow.objects.keys().copied().collect();
 
         for obj_id in object_ids {
-            let phys_region =
-                available_normal_memory.allocate_aligned_from_top(pt_obj_size, pt_obj_size);
+            let obj_size = shadow_obj_size_bytes(shadow, obj_id, kernel_config);
+
+            let phys_addr = (*shared_phys_addr_prev)
+                .checked_sub(obj_size)
+                .expect("no underflow while allocating shared pagetable object");
 
             shadow
-                .assign_object_paddr(obj_id, phys_region.base, phys_region.size())
+                .assign_object_paddr(obj_id, phys_addr, obj_size)
                 .expect("shadow pagetable object should be assignable exactly once");
 
-            all_shared_pagetable_phys_regions.insert_region(phys_region.base, phys_region.end);
+            all_shared_pagetable_phys_regions
+                .insert_region(phys_addr, phys_addr + obj_size);
 
-            for &cpu in &shadow.cpus {
-                per_core_shared_pagetable_regions
-                    .entry(cpu)
-                    .or_default()
-                    .insert_region(phys_region.base, phys_region.end);
-            }
+            *shared_phys_addr_prev = phys_addr;
 
             println!(
-                "    shadow '{}' object {:?} -> [{:x}..{:x}), visible on cpus {:?}",
+                "    shadow '{}' object {:?} -> [{:x}..{:x}) size=0x{:x}",
                 shadow.name,
                 obj_id,
-                phys_region.base,
-                phys_region.end,
-                shadow.cpus,
+                phys_addr,
+                phys_addr + obj_size,
+                obj_size,
             );
         }
     }
 
-    (
-        all_shared_pagetable_phys_regions,
-        per_core_shared_pagetable_regions,
-    )
+    all_shared_pagetable_phys_regions
 }
 
 pub fn build_full_system_state(
@@ -792,6 +804,12 @@ pub fn build_full_system_state(
         shared_phys_addr_prev = phys_addr;
     }
 
+    let shared_pagetable_phys_regions = allocate_shared_shadow_pagetables(
+        shadow_pagetables,
+        &mut shared_phys_addr_prev,
+        kernel_config,
+    );
+
     let (per_core_ram_regions, shared_pagetable_phys_regions) = {
         let mut per_core_regions = BTreeMap::new();
 
@@ -808,21 +826,14 @@ pub fn build_full_system_state(
         for s_mr in shared_memory_phys_regions.regions.iter() {
             available_normal_memory.remove_region(s_mr.base, s_mr.end);
         }
+        for s_pt in shared_pagetable_phys_regions.regions.iter() {
+            available_normal_memory.remove_region(s_pt.base, s_pt.end);
+        }
 
         println!("available memory after removing shared memory regions:");
         for r in available_normal_memory.regions.iter() {
             println!("    [{:x}..{:x})", r.base, r.end);
         }
-
-        // 2. Allocate shared pagetable memory from normal RAM.
-        let (
-            shared_pagetable_phys_regions,
-            per_core_shared_pagetable_regions,
-        ) = allocate_shared_shadow_pagetables(
-            shadow_pagetables,
-            &mut available_normal_memory,
-            kernel_config,
-        );
 
         println!("shared pagetable memory:");
         for r in shared_pagetable_phys_regions.regions.iter() {
@@ -883,18 +894,18 @@ pub fn build_full_system_state(
             core_normal_memory.extend(&ram_mem);
         }
 
-        for (&cpu, shared_pt_regions) in per_core_shared_pagetable_regions.iter() {
-            let core_normal_memory = per_core_regions
-                .get_mut(&cpu)
-                .expect("cpu should exist in per_core_regions");
+        // for (&cpu, shared_pt_regions) in per_core_shared_pagetable_regions.iter() {
+        //     let core_normal_memory = per_core_regions
+        //         .get_mut(&cpu)
+        //         .expect("cpu should exist in per_core_regions");
 
-            core_normal_memory.extend(shared_pt_regions);
+        //     core_normal_memory.extend(shared_pt_regions);
 
-            println!("cpu({}) shared pagetable ram:", cpu.0);
-            for r in shared_pt_regions.regions.iter() {
-                println!("    [{:x}..{:x})", r.base, r.end);
-            }
-        }
+        //     println!("cpu({}) shared pagetable ram:", cpu.0);
+        //     for r in shared_pt_regions.regions.iter() {
+        //         println!("    [{:x}..{:x})", r.base, r.end);
+        //     }
+        // }
 
         for (&cpu, core_normal_memory) in per_core_regions.iter() {
             println!("cpu({}) final ram regions:", cpu.0);
