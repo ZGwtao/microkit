@@ -35,9 +35,6 @@ typedef seL4_MessageInfo_t microkit_msginfo;
 #define MICROKIT_MAX_IOPORT_ID MICROKIT_MAX_CHANNELS
 #define MICROKIT_PD_NAME_LENGTH 64
 
-/* Only valid in the 'monitor_protection_domain' configuration */
-#define MICROKIT_TRUSTED_LOADING_INFO_LENGTH       (1UL << 16)
-
 /* User provided functions */
 void init(void);
 void notified(microkit_channel ch);
@@ -50,7 +47,8 @@ extern seL4_Bool microkit_have_signal;
 extern seL4_CPtr microkit_signal_cap;
 extern seL4_MessageInfo_t microkit_signal_msg;
 
-extern char microkit_trusted_loading_info[MICROKIT_TRUSTED_LOADING_INFO_LENGTH];
+extern char microkit_trusted_loading_info[];
+
 /* Symbols for error checking libmicrokit API calls. Patched by the Microkit tool
  * to set bits corresponding to valid channels for this PD. */
 extern seL4_Word microkit_irqs;

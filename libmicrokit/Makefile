@@ -56,7 +56,7 @@ CFLAGS := -std=gnu11 \
 		  $(CFLAGS_ARCH)
 
 LIBS := libmicrokit.a
-OBJS := main.o crt0.o dbg.o
+OBJS := main.o crt0.o dbg.o tsld.o
 
 $(BUILD_DIR)/%.o : src/$(ARCH_DIR)/%.S
 	$(CC) -x assembler-with-cpp -c $(CFLAGS) $< -o $@
