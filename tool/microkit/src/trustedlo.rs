@@ -45,10 +45,10 @@ impl Default for TSLDRMappingInfo {
 #[repr(C)]
 pub struct TSLDRMetadataInfo {
     pub child_id:   usize,
-    pub system_hash: u64,
-    pub channels:   [u8; MAX_CHANNELS],
-    pub cstate:     [u8; MAX_CHANNELS],
+    pub notifications:   [u8; MAX_CHANNELS],
+    pub ppcs:     [u8; MAX_CHANNELS],
     pub irqs:       [u64; MAX_CHANNELS],
+    pub ioports:    [u8; MAX_CHANNELS],
     pub mappings:   [TSLDRMappingInfo; MAX_MAPPINGS],
     pub init:       u8,
 }
@@ -56,10 +56,10 @@ impl Default for TSLDRMetadataInfo {
     fn default() -> Self {
         TSLDRMetadataInfo {
             child_id:   0,
-            system_hash: 0,
-            channels:   [0u8; MAX_CHANNELS],
-            cstate:     [0u8; MAX_CHANNELS],
+            notifications:   [0u8; MAX_CHANNELS],
+            ppcs:     [0u8; MAX_CHANNELS],
             irqs:       [0u64; MAX_CHANNELS],
+            ioports:    [0u8; MAX_CHANNELS],
             mappings:   [TSLDRMappingInfo::default(); MAX_MAPPINGS],
             init:       0
         }

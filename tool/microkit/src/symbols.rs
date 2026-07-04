@@ -211,8 +211,8 @@ pub fn patch_symbols_monitor_pd(
             // Make sure the init function instantiate the spec correctly
             assert!(spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].child_id == child_idx);
 
-            let mut opt_channel = [0u8; MAX_CHANNELS];
-            let mut opt_channel_attr = [0u8; MAX_CHANNELS];
+            let mut opt_ntfn = [0u8; MAX_CHANNELS];
+            let mut opt_ppc = [0u8; MAX_CHANNELS];
 
             for channel in system.channels.iter().filter(|c| c.end_a.optional || c.end_b.optional) {
                 if channel.end_a.pd == curr_idx {
@@ -220,26 +220,28 @@ pub fn patch_symbols_monitor_pd(
                         "Optional channel for PD '{}' found (id={})",
                         system.protection_domains[curr_idx].name, channel.end_a.id
                     );
-                    opt_channel[channel.end_a.id as usize] = 1;
                     // if protected procedure call...
                     if channel.end_a.pp {
-                        opt_channel_attr[channel.end_a.id as usize] = 1;
+                        opt_ppc[channel.end_a.id as usize] = 1;
+                    } else {
+                        opt_ntfn[channel.end_a.id as usize] = 1;
                     }
                 } else if channel.end_b.pd == curr_idx {
                     println!(
                         "Optional channel for PD '{}' found (id={})",
                         system.protection_domains[curr_idx].name, channel.end_b.id
                     );
-                    opt_channel[channel.end_b.id as usize] = 1;
                     // if protected procedure call...
                     if channel.end_b.pp {
-                        opt_channel_attr[channel.end_b.id as usize] = 1;
+                        opt_ppc[channel.end_b.id as usize] = 1;
+                    } else {
+                        opt_ntfn[channel.end_b.id as usize] = 1;
                     }
                 }
             }
 
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].channels.copy_from_slice(&opt_channel);
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].cstate.copy_from_slice(&opt_channel_attr);
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].notifications.copy_from_slice(&opt_ntfn);
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].ppcs.copy_from_slice(&opt_ppc);
 
             // Iterate all optional mappings for each dynamic PD
             // Each optional mapping contains no less than 1 frame (which means it is a region)
@@ -255,10 +257,6 @@ pub fn patch_symbols_monitor_pd(
                     attrs: map.attrs,
                 }
             }
-
-            // We can use this field to tell the trusted loader
-            // that this child PD has optional resources
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].system_hash = 0xffff;
             spec_trusted_loader.avail_metadata_info += 1;
 
         }
