@@ -211,8 +211,8 @@ pub fn patch_symbols_monitor_pd(
             // Make sure the init function instantiate the spec correctly
             assert!(spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].child_id == child_idx);
 
-            let mut opt_ntfn = [0u8; MAX_CHANNELS];
-            let mut opt_ppc = [0u8; MAX_CHANNELS];
+            let mut opt_ntfn: u64 = 0;
+            let mut opt_ppc: u64 = 0;
 
             for channel in system.channels.iter().filter(|c| c.end_a.optional || c.end_b.optional) {
                 if channel.end_a.pd == curr_idx {
@@ -222,9 +222,9 @@ pub fn patch_symbols_monitor_pd(
                     );
                     // if protected procedure call...
                     if channel.end_a.pp {
-                        opt_ppc[channel.end_a.id as usize] = 1;
+                        opt_ppc |= 1 << channel.end_a.id;
                     } else {
-                        opt_ntfn[channel.end_a.id as usize] = 1;
+                        opt_ntfn |= 1 << channel.end_a.id;
                     }
                 } else if channel.end_b.pd == curr_idx {
                     println!(
@@ -233,15 +233,21 @@ pub fn patch_symbols_monitor_pd(
                     );
                     // if protected procedure call...
                     if channel.end_b.pp {
-                        opt_ppc[channel.end_b.id as usize] = 1;
+                        opt_ppc |= 1 << channel.end_b.id;
                     } else {
-                        opt_ntfn[channel.end_b.id as usize] = 1;
+                        opt_ntfn |= 1 << channel.end_b.id;
                     }
                 }
             }
 
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].notifications.copy_from_slice(&opt_ntfn);
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].ppcs.copy_from_slice(&opt_ppc);
+            let mut opt_irq: u64 = 0;
+            let mut opt_ioport: u64 = 0;
+            // TODO: implement optional IRQs and IoPorts
+
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_notifications = opt_ntfn;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_ppcs = opt_ppc;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_irqs = opt_irq;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_ioports = opt_ioport;
 
             // Iterate all optional mappings for each dynamic PD
             // Each optional mapping contains no less than 1 frame (which means it is a region)
