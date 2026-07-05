@@ -45,10 +45,14 @@ impl Default for TSLDRMappingInfo {
 #[repr(C)]
 pub struct TSLDRMetadataInfo {
     pub child_id:       usize,
-    pub bitmap_notifications:  u64,
-    pub bitmap_ppcs:           u64,
-    pub bitmap_irqs:           u64,
-    pub bitmap_ioports:        u64,
+    pub bitmap_opt_notifications:   u64,
+    pub bitmap_opt_ppcs:            u64,
+    pub bitmap_opt_irqs:            u64,
+    pub bitmap_opt_ioports:         u64,
+    pub microkit_notifications:     u64,
+    pub microkit_pps:               u64,
+    pub microkit_irqs:              u64,
+    pub microkit_ioports:           u64,
     pub mappings: [TSLDRMappingInfo; MAX_MAPPINGS],
     pub init:           u8,
 }
@@ -56,10 +60,14 @@ impl Default for TSLDRMetadataInfo {
     fn default() -> Self {
         TSLDRMetadataInfo {
             child_id:       0,
-            bitmap_notifications:  0,
-            bitmap_ppcs:           0,
-            bitmap_irqs:           0,
-            bitmap_ioports:        0,
+            bitmap_opt_notifications:   0,
+            bitmap_opt_ppcs:            0,
+            bitmap_opt_irqs:            0,
+            bitmap_opt_ioports:         0,
+            microkit_notifications:     0,
+            microkit_pps:               0,
+            microkit_irqs:              0,
+            microkit_ioports:           0,
             mappings: [TSLDRMappingInfo::default(); MAX_MAPPINGS],
             init:           0
         }

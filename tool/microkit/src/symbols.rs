@@ -11,7 +11,7 @@ use crate::{
     sdf::{self, SysMemoryRegion, SystemDescription},
     sel4::{Arch, Config},
     trustedlo::{TSLDRMDInfoDB, TSLDRMappingInfo},
-    MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH, MAX_CHANNELS,
+    MAX_PDS, MAX_VMS, PD_MAX_NAME_LENGTH, VM_MAX_NAME_LENGTH,
     util::{monitor_serialise_names, monitor_serialise_u64_vec, struct_to_bytes}
 };
 
@@ -240,14 +240,41 @@ pub fn patch_symbols_monitor_pd(
                 }
             }
 
-            let mut opt_irq: u64 = 0;
-            let mut opt_ioport: u64 = 0;
+            // let mut opt_irq: u64 = 0;
+            // let mut opt_ioport: u64 = 0;
             // TODO: implement optional IRQs and IoPorts
 
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_notifications = opt_ntfn;
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_ppcs = opt_ppc;
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_irqs = opt_irq;
-            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_ioports = opt_ioport;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_opt_notifications = opt_ntfn;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_opt_ppcs = opt_ppc;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_opt_irqs = 0;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].bitmap_opt_ioports = 0;
+
+            // bitmaps for all channel capabilities
+            let mut notification_bits: u64 = 0;
+            let mut pp_bits: u64 = 0;
+            for channel in system.channels.iter() {
+                if channel.end_a.pd == curr_idx {
+                    if channel.end_a.notify {
+                        notification_bits |= 1 << channel.end_a.id;
+                    }
+                    if channel.end_a.pp {
+                        pp_bits |= 1 << channel.end_a.id;
+                    }
+                }
+                if channel.end_b.pd == curr_idx {
+                    if channel.end_b.notify {
+                        notification_bits |= 1 << channel.end_b.id;
+                    }
+                    if channel.end_b.pp {
+                        pp_bits |= 1 << channel.end_b.id;
+                    }
+                }
+            }
+
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].microkit_notifications = notification_bits;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].microkit_pps = pp_bits;
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].microkit_irqs = c.irq_bits();
+            spec_trusted_loader.trusted_loading_metadata_info_database[child_idx].microkit_ioports = c.ioport_bits();
 
             // Iterate all optional mappings for each dynamic PD
             // Each optional mapping contains no less than 1 frame (which means it is a region)
