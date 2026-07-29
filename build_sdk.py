@@ -44,7 +44,7 @@ DEFAULT_X86_NUM_CPUS = 16
 
 DEFAULT_KERNEL_OPTIONS = {
     "KernelIsMCS": True,
-    "KernelRootCNodeSizeBits": "17",
+    "KernelRootCNodeSizeBits": "18",
 }
 
 DEFAULT_KERNEL_OPTIONS_AARCH64 = {
